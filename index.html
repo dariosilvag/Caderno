@@ -260,9 +260,10 @@ html, body { overflow: hidden; }
 .m3d .cutbar { position: absolute; left: 10px; right: 10px; bottom: 28px; display: none; align-items: center; gap: 8px; background: var(--bar); border-radius: 14px; padding: 4px 10px; font-size: 12px; font-weight: 600; z-index: 2; }
 .m3d.cutting .cutbar { display: flex; }
 .m3d .cutbar input { flex: 1; min-width: 0; }
+.vtag{font:600 12px/1 system-ui,sans-serif;background:var(--accent,#7c8cff);color:#fff;border-radius:8px;padding:3px 7px;margin-left:8px;vertical-align:middle}.vtag.bad{background:#e5484d}
 </style></head><body><div id="app" data-view="list">
   <aside id="side" aria-label="Pastas">
-    <div class="brand"><i><svg class="ico" data-ico="pen"></svg></i>Caderno</div>
+    <div class="brand"><i><svg class="ico" data-ico="pen"></svg></i>Caderno <span id="verTag" class="vtag"></span></div>
     <nav class="folders" id="folders"></nav>
     <div class="side-foot">
       <button id="btnNewFolder" type="button"><svg class="ico" data-ico="folderplus"></svg>Nova pasta</button>
@@ -568,7 +569,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&
 window.CP = { $: $, $$: $$, S: S, icon: icon, svgIcon: svgIcon, paintIcons: paintIcons, COLORS: COLORS, HL_COLORS: HL_COLORS, PAPERS: PAPERS,
   PAGE_W: PAGE_W, PAGE_H: PAGE_H, uid: uid, newNote: newNote, byId: byId, cur: cur, queueSave: queueSave, flushSave: flushSave,
   persistLocal: persistLocal, persistMeta: persistMeta, deleteForever: deleteForever, initStore: initStore, toast: toast,
-  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v9' };
+  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v10' };
 })();
 (function () {
 'use strict';
@@ -823,7 +824,7 @@ function armHold() {
       d.s.d = A.pts; d.snapped = true;
       if (A.kind === 'line' && CP.tables) { d.tbl = CP.tables.detect(A, note()); if (d.tbl) CP.toast('Solte para criar a tabela'); }
       E.drawLive(d.s); try { if (navigator.vibrate) navigator.vibrate(d.tbl ? [12, 40, 12] : 10); } catch (x) {}
-    }
+    } else if (d.s.d.length > 18 && !d.warned) { d.warned = true; CP.toast('Forma não reconhecida: feche o desenho e segure a caneta parada'); }
   }, 520);
 }
 function onMove(e) {
@@ -1822,8 +1823,31 @@ if (th) {
 
 /* ---------- Instalação e uso offline ---------- */
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-  window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+  var hadCtl = !!navigator.serviceWorker.controller, reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function () { if (hadCtl && !reloaded) { reloaded = true; location.reload(); } });
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (reg) {
+      reg.update().catch(function () {});
+      document.addEventListener('visibilitychange', function () { if (!document.hidden) reg.update().catch(function () {}); });
+    }).catch(function () {});
+  });
 }
+/* Etiqueta de versão ao lado do nome; fica vermelha se o site publicado for outro */
+CP.forceUpdate = function () {
+  var p = [];
+  if ('serviceWorker' in navigator) p.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }));
+  if (window.caches) p.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches['delete'](k); })); }));
+  Promise.all(p).catch(function () {}).then(function () { location.replace(location.pathname + '?u=' + Date.now()); });
+};
+CP.inits.push(function () {
+  var t = document.getElementById('verTag'); if (!t) return;
+  t.textContent = CP.VERSION;
+  if (!/^https?:$/.test(location.protocol) || typeof fetch !== 'function') return;
+  fetch('sw.js?c=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (s) {
+    var m = /caderno-(v\d+)/.exec(s);
+    if (m && m[1] !== CP.VERSION) { t.textContent = CP.VERSION + ' ≠ ' + m[1]; t.classList.add('bad'); t.addEventListener('click', function () { CP.toast('Atualizando…'); CP.forceUpdate(); }); CP.toast('Há uma versão nova (' + m[1] + '). Toque na etiqueta vermelha para atualizar.'); }
+  }).catch(function () {});
+});
 })();
 (function () {
 'use strict';
@@ -2522,7 +2546,8 @@ CP.renderTools = function (closePops) {
     ['zoom', 'Zoom ' + z + '%', false, function () { CP.zoom.reset(); }],
     ['download', 'Exportar PDF…', false, function () { CP.exportMenu(); }],
     ['file', 'Abrir nota', false, function () { CP.pickNoteFile(); }],
-    ['tools', 'Diagnóstico', false, function () { CP.diag(); }]
+    ['tools', 'Diagnóstico', false, function () { CP.diag(); }],
+    ['pdf', 'Atualizar app', false, function () { CP.toast('Atualizando…'); CP.forceUpdate(); }]
   ];
   items.forEach(function (it) {
     var b = document.createElement('button'); b.type = 'button'; b.className = 'insbtn' + (it[2] ? ' on' : '');

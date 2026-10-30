@@ -1,4 +1,4 @@
-var V = 'caderno-v9';
+var V = 'caderno-v10';
 var FILES = ['./', 'index.html', 'vendor3d.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', function (e) {
@@ -14,7 +14,7 @@ self.addEventListener('fetch', function (e) {
   if (r.method !== 'GET' || new URL(r.url).origin !== location.origin) return;
   if (r.mode === 'navigate') {
     /* Páginas: tenta a rede primeiro (pega atualizações) e cai para o cache sem internet */
-    e.respondWith(fetch(r).then(function (res) {
+    e.respondWith(fetch(r.url, { cache: 'reload' }).then(function (res) {
       var copy = res.clone(); caches.open(V).then(function (c) { c.put('index.html', copy); }); return res;
     }).catch(function () { return caches.match('index.html'); }));
     return;
