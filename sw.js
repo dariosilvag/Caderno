@@ -1,8 +1,8 @@
-var V = 'caderno-v5';
+var V = 'caderno-v9';
 var FILES = ['./', 'index.html', 'vendor3d.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(V).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));
+  e.waitUntil(caches.open(V).then(function (c) { return c.addAll(FILES).then(function () { return Promise.all(['vendorpdf.js', 'pdf.worker.js'].map(function (f) { return c.add(f).catch(function () {}); })); }); }).then(function () { return self.skipWaiting(); }));
 });
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (ks) {

@@ -293,6 +293,7 @@ html, body { overflow: hidden; }
         <span class="saved" id="saved"></span>
         <button class="ibtn" id="btnUndo" type="button" aria-label="Desfazer"><svg class="ico" data-ico="undo"></svg></button>
         <button class="ibtn" id="btnRedo" type="button" aria-label="Refazer"><svg class="ico" data-ico="redo"></svg></button>
+        <button class="ibtn" id="btnExpTop" type="button" aria-label="Exportar (PDF, imagem…)"><svg class="ico" data-ico="download"></svg></button>
         <button class="ibtn" id="btnFav" type="button" aria-label="Favoritar"><svg class="ico" data-ico="star"></svg></button>
         <button class="ibtn" id="btnMore" type="button" aria-label="Mais opções"><svg class="ico" data-ico="more"></svg></button>
       </div>
@@ -324,7 +325,7 @@ html, body { overflow: hidden; }
       </div>
 
       <div class="pop" id="popTools" hidden>
-        <h4>Ferramentas</h4>
+        <h4 id="toolsH">Ferramentas</h4>
         <div class="insgrid" id="toolsGrid"></div>
       </div>
 
@@ -567,7 +568,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&
 window.CP = { $: $, $$: $$, S: S, icon: icon, svgIcon: svgIcon, paintIcons: paintIcons, COLORS: COLORS, HL_COLORS: HL_COLORS, PAPERS: PAPERS,
   PAGE_W: PAGE_W, PAGE_H: PAGE_H, uid: uid, newNote: newNote, byId: byId, cur: cur, queueSave: queueSave, flushSave: flushSave,
   persistLocal: persistLocal, persistMeta: persistMeta, deleteForever: deleteForever, initStore: initStore, toast: toast,
-  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [] };
+  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v9' };
 })();
 (function () {
 'use strict';
@@ -745,6 +746,10 @@ function apply(a, undo) {
   } else if (a.t === 'mod') {
     a.items.forEach(function (it) { var f = undo ? it.from : it.to; it.s.d = f.d.slice(); it.s.c = f.c; it.s.l = f.l; if (f.l == null) delete it.s.l; });
     if (CP.hooks.onModify) CP.hooks.onModify();
+  } else if (a.t === 'tbl') {
+    n.objs = n.objs || [];
+    if (undo) n.objs = n.objs.filter(function (x) { return x !== a.o; }); else n.objs.push(a.o);
+    if (E.placeObjs) E.placeObjs();
   } else if (a.t === 'tadd') {
     if (undo) n.texts = n.texts.filter(function (t) { return t !== a.tx; }); else n.texts.push(a.tx);
     placeTexts();
@@ -813,9 +818,13 @@ function armHold() {
   if (!S.snap) return;
   d.holdT = setTimeout(function () {
     if (!drawing || drawing !== d || d.snapped) return;
-    var r = CP.shapes.recognize(d.s.d);
-    if (r) { d.s.d = r; d.snapped = true; E.drawLive(d.s); try { if (navigator.vibrate) navigator.vibrate(10); } catch (x) {} }
-  }, 560);
+    var A = CP.shapes.analyze(d.s.d);
+    if (A) {
+      d.s.d = A.pts; d.snapped = true;
+      if (A.kind === 'line' && CP.tables) { d.tbl = CP.tables.detect(A, note()); if (d.tbl) CP.toast('Solte para criar a tabela'); }
+      E.drawLive(d.s); try { if (navigator.vibrate) navigator.vibrate(d.tbl ? [12, 40, 12] : 10); } catch (x) {}
+    }
+  }, 520);
 }
 function onMove(e) {
   if (e.pointerType === 'touch' && touches[e.pointerId]) {
@@ -836,7 +845,7 @@ function onMove(e) {
   if (ch) {
     E.drawLive(drawing.s);
     var q = E.toLogical(e);
-    if (Math.hypot(q.x - drawing.ax, q.y - drawing.ay) > 5) { drawing.ax = q.x; drawing.ay = q.y; armHold(); }
+    if (Math.hypot(q.x - drawing.ax, q.y - drawing.ay) > 9) { drawing.ax = q.x; drawing.ay = q.y; armHold(); }
   }
 }
 function onUp(e) {
@@ -854,6 +863,7 @@ function onUp(e) {
     if (d.erased.length) { undoSt.push({ t: 'del', list: d.erased }); redoSt = []; changed(); }
     return;
   }
+  if (d.tbl && d.snapped) { E.drawLive(null); CP.tables.make(d.tbl); return; }
   if (d.rule && d.s.d.length > 3 && CP.ruler.report) CP.ruler.report(d.s);
   if (d.s.d.length) { note().strokes.push(d.s); undoSt.push({ t: 'add', s: d.s }); redoSt = []; E.drawLive(null); E.redraw(); changed(); }
   else E.drawLive(null);
@@ -987,15 +997,14 @@ function perp(p, a, b) {
   if (!L) return dist(p, a);
   return Math.abs((p.x - a.x) * vy - (p.y - a.y) * vx) / L;
 }
-/* Douglas-Peucker: devolve os índices dos vértices mantidos */
 function dp(P, i, j, eps, keep) {
   var m = -1, md = 0;
   for (var k = i + 1; k < j; k++) { var d = perp(P[k], P[i], P[j]); if (d > md) { md = d; m = k; } }
   if (md > eps && m > 0) { dp(P, i, m, eps, keep); keep.push(m); dp(P, m, j, eps, keep); }
 }
 function simplify(P, eps) { var keep = [0]; dp(P, 0, P.length - 1, eps, keep); keep.push(P.length - 1); return keep.map(function (i) { return P[i]; }); }
-
-function out(list) { var o = []; list.forEach(function (p) { o.push(Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10, 60); }); return o; }
+function round1(v) { return Math.round(v * 10) / 10; }
+function out(list) { var o = []; list.forEach(function (p) { o.push(round1(p.x), round1(p.y), 60); }); return o; }
 function polyline(V, closed) {
   var list = [], n = V.length, last = closed ? n : n - 1;
   for (var i = 0; i < last; i++) {
@@ -1005,9 +1014,12 @@ function polyline(V, closed) {
   list.push(closed ? { x: V[0].x, y: V[0].y } : { x: V[n - 1].x, y: V[n - 1].y });
   return out(list);
 }
-function ellipse(cx, cy, rx, ry) {
-  var list = [];
-  for (var i = 0; i <= 72; i++) { var t = i / 72 * Math.PI * 2; list.push({ x: cx + Math.cos(t) * rx, y: cy + Math.sin(t) * ry }); }
+function ellipse(cx, cy, rx, ry, ang) {
+  var list = [], c = Math.cos(ang || 0), s = Math.sin(ang || 0);
+  for (var i = 0; i <= 72; i++) {
+    var t = i / 72 * Math.PI * 2, u = Math.cos(t) * rx, v = Math.sin(t) * ry;
+    list.push({ x: cx + u * c - v * s, y: cy + u * s + v * c });
+  }
   return out(list);
 }
 function angleAt(a, b, c) {
@@ -1015,61 +1027,222 @@ function angleAt(a, b, c) {
   var cos = (v1x * v2x + v1y * v2y) / (Math.hypot(v1x, v1y) * Math.hypot(v2x, v2y) || 1);
   return Math.acos(Math.max(-1, Math.min(1, cos))) * 180 / Math.PI;
 }
+/* Reamostra o traço em n pontos igualmente espaçados (o ritmo da mão deixa de importar) */
+function resample(P, n) {
+  var L = pathLen(P); if (!L) return P.slice();
+  var step = L / (n - 1), res = [P[0]], acc = 0, prev = P[0];
+  for (var i = 1; i < P.length; i++) {
+    var cur = P[i], d = dist(prev, cur);
+    while (d > 0 && acc + d >= step) {
+      var t = (step - acc) / d, q = { x: prev.x + (cur.x - prev.x) * t, y: prev.y + (cur.y - prev.y) * t };
+      res.push(q); prev = q; d = dist(prev, cur); acc = 0;
+    }
+    acc += d; prev = cur;
+  }
+  if (res.length < n) res.push(P[P.length - 1]);
+  return res;
+}
+function median(a) { var b = a.slice().sort(function (x, y) { return x - y; }); return b[Math.floor(b.length / 2)]; }
 
-function recognize(d) {
-  var P = pts(d); if (P.length < 8) return null;
-  var minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
-  P.forEach(function (p) { minx = Math.min(minx, p.x); maxx = Math.max(maxx, p.x); miny = Math.min(miny, p.y); maxy = Math.max(maxy, p.y); });
-  var w = maxx - minx, h = maxy - miny, diag = Math.hypot(w, h);
-  if (diag < 40) return null;
+/* ---- Círculo por mínimos quadrados (Kåsa): aguenta arco incompleto e sobra no fim ---- */
+function fitCircle(R, D) {
+  var n = R.length, mx = 0, my = 0, i;
+  R.forEach(function (p) { mx += p.x; my += p.y; }); mx /= n; my /= n;
+  var Suu = 0, Suv = 0, Svv = 0, Suuu = 0, Svvv = 0, Suvv = 0, Svuu = 0;
+  R.forEach(function (p) { var u = p.x - mx, v = p.y - my; Suu += u * u; Suv += u * v; Svv += v * v; Suuu += u * u * u; Svvv += v * v * v; Suvv += u * v * v; Svuu += v * u * u; });
+  var det = Suu * Svv - Suv * Suv; if (Math.abs(det) < 1e-9) return null;
+  var b1 = 0.5 * (Suuu + Suvv), b2 = 0.5 * (Svvv + Svuu);
+  var uc = (b1 * Svv - b2 * Suv) / det, vc = (Suu * b2 - Suv * b1) / det;
+  var cx = mx + uc, cy = my + vc, r = Math.sqrt(uc * uc + vc * vc + (Suu + Svv) / n);
+  var err = 0, ang = [];
+  R.forEach(function (p) { err += Math.abs(Math.hypot(p.x - cx, p.y - cy) - r); ang.push(Math.atan2(p.y - cy, p.x - cx)); });
+  ang.sort(function (a, b) { return a - b; });
+  var gap = 0; for (i = 1; i < ang.length; i++) gap = Math.max(gap, ang[i] - ang[i - 1]);
+  gap = Math.max(gap, ang[0] + Math.PI * 2 - ang[ang.length - 1]);
+  return { cx: cx, cy: cy, r: r, err: err / n / D, cover: 360 - gap * 180 / Math.PI };
+}
+/* ---- Elipse por eixos principais (laço quase fechado) ---- */
+function fitEllipse(R, D) {
+  var n = R.length, cx = 0, cy = 0;
+  R.forEach(function (p) { cx += p.x; cy += p.y; }); cx /= n; cy /= n;
+  var sxx = 0, syy = 0, sxy = 0;
+  R.forEach(function (p) { var u = p.x - cx, v = p.y - cy; sxx += u * u; syy += v * v; sxy += u * v; }); sxx /= n; syy /= n; sxy /= n;
+  var th = 0.5 * Math.atan2(2 * sxy, sxx - syy), c = Math.cos(th), s = Math.sin(th);
+  var l1 = sxx * c * c + 2 * sxy * c * s + syy * s * s, l2 = sxx * s * s - 2 * sxy * c * s + syy * c * c;
+  var a = Math.sqrt(2 * Math.max(l1, 1e-6)), b = Math.sqrt(2 * Math.max(l2, 1e-6)), err = 0;
+  R.forEach(function (p) {
+    var u = (p.x - cx) * c + (p.y - cy) * s, v = -(p.x - cx) * s + (p.y - cy) * c;
+    err += Math.abs(Math.hypot(u / a, v / b) - 1) * Math.sqrt(a * b);
+  });
+  return { cx: cx, cy: cy, a: a, b: b, th: th, err: err / n / D };
+}
+/* ---- Retângulo de menor área, com as laterais ajustadas pela mediana dos pontos ---- */
+function fitRect(R, D) {
+  var best = null, deg, n = R.length;
+  for (deg = 0; deg < 90; deg++) {
+    var t = deg * Math.PI / 180, c = Math.cos(t), s = Math.sin(t), u0 = 1e9, u1 = -1e9, v0 = 1e9, v1 = -1e9;
+    R.forEach(function (p) { var u = p.x * c + p.y * s, v = -p.x * s + p.y * c; if (u < u0) u0 = u; if (u > u1) u1 = u; if (v < v0) v0 = v; if (v > v1) v1 = v; });
+    var area = (u1 - u0) * (v1 - v0);
+    if (!best || area < best.area) best = { area: area, deg: deg };
+  }
+  /* escolhe o ângulo mais próximo do eixo se a diferença de área for pequena */
+  function frame(deg) {
+    var t = deg * Math.PI / 180, c = Math.cos(t), s = Math.sin(t), u0 = 1e9, u1 = -1e9, v0 = 1e9, v1 = -1e9, U = [], V = [];
+    R.forEach(function (p) { var u = p.x * c + p.y * s, v = -p.x * s + p.y * c; U.push(u); V.push(v); if (u < u0) u0 = u; if (u > u1) u1 = u; if (v < v0) v0 = v; if (v > v1) v1 = v; });
+    return { c: c, s: s, U: U, V: V, u0: u0, u1: u1, v0: v0, v1: v1 };
+  }
+  var deg0 = best.deg; if (deg0 > 45) deg0 -= 90;
+  var useDeg = Math.abs(deg0) <= 9 ? 0 : best.deg, f = frame(useDeg);
+  var sides = [[], [], [], []];
+  for (var i = 0; i < n; i++) {
+    var d = [f.U[i] - f.u0, f.u1 - f.U[i], f.V[i] - f.v0, f.v1 - f.V[i]], k = 0;
+    for (var j = 1; j < 4; j++) if (d[j] < d[k]) k = j;
+    sides[k].push(k < 2 ? f.U[i] : f.V[i]);
+  }
+  for (var q = 0; q < 4; q++) if (sides[q].length < Math.max(3, n * 0.08)) return { err: 9 };
+  var u0 = median(sides[0]), u1 = median(sides[1]), v0 = median(sides[2]), v1 = median(sides[3]);
+  if (u1 - u0 < 10 || v1 - v0 < 10) return { err: 9 };
+  var err = 0;
+  for (var m = 0; m < n; m++) err += Math.min(Math.abs(f.U[m] - u0), Math.abs(f.U[m] - u1), Math.abs(f.V[m] - v0), Math.abs(f.V[m] - v1));
+  var W = u1 - u0, H = v1 - v0, cu = (u0 + u1) / 2, cv = (v0 + v1) / 2;
+  if (Math.abs(W - H) / Math.max(W, H) < 0.1) { W = H = (W + H) / 2; }
+  var cs = [[cu - W / 2, cv - H / 2], [cu + W / 2, cv - H / 2], [cu + W / 2, cv + H / 2], [cu - W / 2, cv + H / 2]].map(function (uv) {
+    return { x: uv[0] * f.c - uv[1] * f.s, y: uv[0] * f.s + uv[1] * f.c };
+  });
+  /* os 4 cantos precisam existir: triângulos e losangos tortos não passam */
+  var mn = Math.min(W, H);
+  for (var ci = 0; ci < 4; ci++) {
+    var dm = 1e9; R.forEach(function (p) { dm = Math.min(dm, Math.hypot(p.x - cs[ci].x, p.y - cs[ci].y)); });
+    if (dm > 0.2 * mn) return { err: 9 };
+  }
+  return { err: err / n / D, corners: cs, deg: useDeg, W: W, H: H, square: W === H };
+}
+
+function bbox(P) {
+  var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  P.forEach(function (p) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); });
+  return { x0: x0, y0: y0, x1: x1, y1: y1 };
+}
+function boxOf(V) { return bbox(V); }
+
+/* Analisa um traço: devolve { kind, pts, box, ... } ou null */
+function analyze(d) {
+  var P = pts(d); if (P.length < 6) return null;
+  var bb = bbox(P), w = bb.x1 - bb.x0, h = bb.y1 - bb.y0, D = Math.hypot(w, h);
+  if (D < 40) return null;
   var L = pathLen(P), a = P[0], b = P[P.length - 1], gap = dist(a, b);
 
-  /* Linha reta (encaixa em horizontal/vertical quando está perto) */
-  if (gap > 0.82 * L) {
+  /* Linha reta: tolera tremor e encaixa em horizontal/vertical a até ~6° */
+  if (gap > 0.8 * L) {
     var dev = 0; P.forEach(function (p) { dev = Math.max(dev, perp(p, a, b)); });
-    if (dev < 0.08 * gap) {
-      var A = { x: a.x, y: a.y }, B = { x: b.x, y: b.y };
-      if (Math.abs(B.y - A.y) < 0.07 * gap) B.y = A.y = (A.y + B.y) / 2;
-      else if (Math.abs(B.x - A.x) < 0.07 * gap) B.x = A.x = (A.x + B.x) / 2;
-      return polyline([A, B], false);
+    if (dev < 0.1 * gap) {
+      var A = { x: a.x, y: a.y }, B = { x: b.x, y: b.y }, ang = Math.atan2(Math.abs(B.y - A.y), Math.abs(B.x - A.x)) * 180 / Math.PI;
+      if (ang < 6) B.y = A.y = (A.y + B.y) / 2; else if (ang > 84) B.x = A.x = (A.x + B.x) / 2;
+      return { kind: 'line', pts: polyline([A, B], false), p1: A, p2: B, box: boxOf([A, B]), horiz: A.y === B.y, vert: A.x === B.x };
     }
     return null;
   }
-  if (gap > 0.25 * L) return null;
+  if (gap > 0.32 * L) return null;
 
-  /* Forma fechada: elipse/círculo */
-  var cx = (minx + maxx) / 2, cy = (miny + maxy) / 2, rx = w / 2, ry = h / 2;
-  if (rx < 8 || ry < 8) return null;
-  var rs = P.map(function (p) { return Math.hypot((p.x - cx) / rx, (p.y - cy) / ry); });
-  var mean = rs.reduce(function (s, v) { return s + v; }, 0) / rs.length;
-  var sd = Math.sqrt(rs.reduce(function (s, v) { return s + (v - mean) * (v - mean); }, 0) / rs.length);
-  if (sd < 0.085 && mean > 0.88 && mean < 1.12) {
-    if (Math.abs(w - h) / Math.max(w, h) < 0.16) { var r = (w + h) / 4; return ellipse(cx, cy, r, r); }
-    return ellipse(cx, cy, rx, ry);
+  /* Formas fechadas: compara círculo, elipse e retângulo pelo erro médio de cada ajuste */
+  var R = resample(P, 96), cand = [];
+  var circ = fitCircle(R, D), ell = fitEllipse(R, D), rect = fitRect(R, D);
+  if (circ && circ.r > 8 && circ.cover > 250) cand.push({ k: 'circle', e: circ.err });
+  if (ell.a > 8 && ell.b > 8 && gap < 0.2 * L) cand.push({ k: 'ellipse', e: ell.err });
+  if (rect.err < 9) cand.push({ k: 'rect', e: rect.err * 0.92 });
+  cand.sort(function (x, y) { return x.e - y.e; });
+  var win = cand[0];
+  if (win && win.e < 0.05) {
+    if (win.k === 'rect') {
+      var cs = rect.corners;
+      return { kind: rect.square ? 'square' : 'rect', pts: polyline(cs, true), box: boxOf(cs), axis: rect.deg === 0, corners: cs };
+    }
+    var useC = circ && circ.cover > 250 && circ.err < 0.05, ratio = Math.min(ell.a, ell.b) / Math.max(ell.a, ell.b);
+    if (win.k === 'circle' || ratio > 0.72) {
+      var cc = useC ? circ : { cx: ell.cx, cy: ell.cy, r: (ell.a + ell.b) / 2 };
+      return { kind: 'circle', pts: ellipse(cc.cx, cc.cy, cc.r, cc.r), box: { x0: cc.cx - cc.r, y0: cc.cy - cc.r, x1: cc.cx + cc.r, y1: cc.cy + cc.r } };
+    }
+    var th = ell.th, ra = ell.a, rb = ell.b, deg = th * 180 / Math.PI;
+    if (Math.abs(deg) < 9) th = 0; else if (Math.abs(Math.abs(deg) - 90) < 9) { th = 0; var t = ra; ra = rb; rb = t; }
+    return { kind: 'ellipse', pts: ellipse(ell.cx, ell.cy, ra, rb, th), box: { x0: ell.cx - ra, y0: ell.cy - rb, x1: ell.cx + ra, y1: ell.cy + rb } };
   }
 
-  /* Polígonos: triângulo, retângulo/losango, quadrilátero, pentágono, hexágono */
-  var V = simplify(P, 0.05 * diag);
-  if (dist(V[0], V[V.length - 1]) < 0.2 * diag) V.pop();
+  /* Polígonos: triângulo, quadrilátero, pentágono, hexágono */
+  var V = simplify(P, 0.06 * D);
+  if (dist(V[0], V[V.length - 1]) < 0.2 * D) V.pop();
   var n = V.length;
   if (n < 3 || n > 6) return null;
-  if (n === 4) {
-    var okRect = true;
-    for (var i = 0; i < 4; i++) { var ang = angleAt(V[(i + 3) % 4], V[i], V[(i + 1) % 4]); if (Math.abs(ang - 90) > 24) okRect = false; }
-    if (okRect) {
-      var axis = true;
-      for (var j = 0; j < 4; j++) { var p = V[j], q = V[(j + 1) % 4]; var t = Math.atan2(Math.abs(q.y - p.y), Math.abs(q.x - p.x)) * 180 / Math.PI; if (t > 12 && t < 78) axis = false; }
-      if (axis) {
-        var sq = Math.abs(w - h) / Math.max(w, h) < 0.12, S = sq ? (w + h) / 2 : 0;
-        var W = sq ? S : w, H = sq ? S : h;
-        return polyline([{ x: minx, y: miny }, { x: minx + W, y: miny }, { x: minx + W, y: miny + H }, { x: minx, y: miny + H }], true);
-      }
-    }
-  }
-  return polyline(V, true);
+  return { kind: 'poly', pts: polyline(V, true), box: boxOf(V), n: n };
 }
+function recognize(d) { var r = analyze(d); return r ? r.pts : null; }
 
-CP.shapes = { recognize: recognize };
+CP.shapes = { recognize: recognize, analyze: analyze };
+})();
+(function () {
+'use strict';
+var CP = window.CP, S = CP.S, E = CP.engine;
+
+/* Tabela automática: desenhe um retângulo, trace linhas por dentro dele e segure a caneta no fim da última linha. */
+function bbox(st) { var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (var i = 0; i < st.d.length; i += 3) { x0 = Math.min(x0, st.d[i]); x1 = Math.max(x1, st.d[i]); y0 = Math.min(y0, st.d[i + 1]); y1 = Math.max(y1, st.d[i + 1]); } return { x0: x0, y0: y0, x1: x1, y1: y1 }; }
+function inside(R, p, tol) { return p.x >= R.x0 - tol && p.x <= R.x1 + tol && p.y >= R.y0 - tol && p.y <= R.y1 + tol; }
+/* a linha corta o retângulo de lado a lado (≥ 70%) e fica longe das bordas? */
+function asCut(R, A) {
+  var W = R.x1 - R.x0, H = R.y1 - R.y0, tol = Math.max(14, 0.06 * Math.min(W, H));
+  if (!inside(R, A.p1, tol) || !inside(R, A.p2, tol)) return null;
+  if (A.horiz) {
+    var y = A.p1.y, span = Math.abs(A.p2.x - A.p1.x);
+    if (span >= 0.7 * W && y > R.y0 + 0.08 * H && y < R.y1 - 0.08 * H) return { h: true, pos: y };
+  } else if (A.vert) {
+    var x = A.p1.x, sp = Math.abs(A.p2.y - A.p1.y);
+    if (sp >= 0.7 * H && x > R.x0 + 0.08 * W && x < R.x1 - 0.08 * W) return { h: false, pos: x };
+  }
+  return null;
+}
+function dedupe(a, min) { a.sort(function (x, y) { return x - y; }); var o = []; a.forEach(function (v) { if (!o.length || v - o[o.length - 1] > min) o.push(v); }); return o; }
+
+CP.tables = {
+  /* A = análise da linha que acabou de ser "colada" pela caneta parada */
+  detect: function (A, n) {
+    if (!A || A.kind !== 'line' || (!A.horiz && !A.vert)) return null;
+    var best = null;
+    n.strokes.forEach(function (st) {
+      if (st.d.length < 24) return;
+      var bb = bbox(st); if (bb.x1 - bb.x0 < 90 || bb.y1 - bb.y0 < 60) return;
+      var B = CP.shapes.analyze(st.d); if (!B || (B.kind !== 'rect' && B.kind !== 'square') || B.axis === false) return;
+      var R = B.box; if (!asCut(R, A)) return;
+      var area = (R.x1 - R.x0) * (R.y1 - R.y0); if (!best || area < best.area) best = { stroke: st, R: R, area: area };
+    });
+    if (!best) return null;
+    var R = best.R, hs = [], vs = [], used = [best.stroke], first = asCut(R, A);
+    (first.h ? hs : vs).push(first.pos);
+    n.strokes.forEach(function (st) {
+      if (st === best.stroke) return;
+      var bb = bbox(st); if (!inside(R, { x: bb.x0, y: bb.y0 }, 10) || !inside(R, { x: bb.x1, y: bb.y1 }, 10)) return;
+      var B = CP.shapes.analyze(st.d); if (!B || B.kind !== 'line') return;
+      var c = asCut(R, B); if (!c) return; (c.h ? hs : vs).push(c.pos); used.push(st);
+    });
+    var W = R.x1 - R.x0, H = R.y1 - R.y0;
+    hs = dedupe(hs, 0.05 * H); vs = dedupe(vs, 0.05 * W);
+    return { R: R, hs: hs, vs: vs, used: used };
+  },
+  make: function (det) {
+    var n = CP.cur(), R = det.R, W = R.x1 - R.x0, H = R.y1 - R.y0;
+    var ys = [R.y0].concat(det.hs, [R.y1]), xs = [R.x0].concat(det.vs, [R.x1]), rows = [], rhs = [], cwf = [], i, j;
+    for (i = 0; i < ys.length - 1; i++) { var row = []; for (j = 0; j < xs.length - 1; j++) row.push(''); rows.push(row); rhs.push(Math.round(ys[i + 1] - ys[i])); }
+    for (j = 0; j < xs.length - 1; j++) cwf.push((xs[j + 1] - xs[j]) / W);
+    var minH = Math.min.apply(null, rhs), fs = Math.max(16, Math.min(28, Math.floor((minH - 16) / 1.35)));
+    var o = { id: CP.uid(), type: 'table', x: Math.round(R.x0), y: Math.round(R.y0), w: Math.round(W), rows: rows, cwf: cwf, rhs: rhs, fs: fs, header: false };
+    var list = [];
+    n.strokes.forEach(function (st, idx) { if (det.used.indexOf(st) >= 0) list.push({ s: st, i: idx }); });
+    n.strokes = n.strokes.filter(function (st) { return det.used.indexOf(st) < 0; });
+    n.objs = n.objs || []; n.objs.push(o);
+    E.push({ t: 'multi', list: [{ t: 'del', list: list }, { t: 'tbl', o: o }] });
+    E.drawLive(null); E.redraw(); if (E.placeObjs) E.placeObjs();
+    S.tool = 'select'; if (CP.hooks.toolChanged) CP.hooks.toolChanged(); CP.persistMeta();
+    setTimeout(function () { var el = document.querySelector('#objs [data-id="' + o.id + '"]'); if (el) { el.classList.add('sel'); S.selObj = o.id; var td = el.querySelector('td'); if (td) td.focus(); } }, 30);
+    CP.toast('Tabela ' + rows.length + '×' + rows[0].length + ' criada. Toque numa célula para escrever.');
+  }
+};
 })();
 (function () {
 'use strict';
@@ -1125,8 +1298,13 @@ function applyTableSize(o, el) { var t = el.querySelector('table'); if (t) t.sty
 function tableEl(o) {
   var el = frame(o, true, false), s = sc();
   var t = document.createElement('table'); t.className = 'otable'; t.style.fontSize = (o.fs || 26) * s + 'px';
+  if (o.cwf && o.cwf.length !== o.rows[0].length) o.cwf = null;
+  if (o.cwf) {
+    t.style.tableLayout = 'fixed'; var cg = document.createElement('colgroup');
+    o.cwf.forEach(function (f) { var c = document.createElement('col'); c.style.width = (f * 100) + '%'; cg.appendChild(c); }); t.appendChild(cg);
+  }
   o.rows.forEach(function (row, r) {
-    var tr = document.createElement('tr');
+    var tr = document.createElement('tr'); if (o.rhs && o.rhs[r]) tr.style.height = o.rhs[r] * s + 'px';
     row.forEach(function (txt, c) {
       var td = document.createElement('td'); td.contentEditable = 'true'; td.spellcheck = false; td.textContent = txt;
       if (r === 0 && o.header) { td.style.fontWeight = '700'; td.style.background = 'rgba(47,91,234,.12)'; }
@@ -1141,8 +1319,8 @@ function tableEl(o) {
   });
   el.appendChild(t);
   var tb = document.createElement('div'); tb.className = 'tbar';
-  [['+ Linha', function () { addRow(o); }], ['− Linha', function () { if (o.rows.length > 1) { o.rows.pop(); redo(o); } }], ['+ Coluna', function () { o.rows.forEach(function (r) { r.push(''); }); redo(o); }],
-   ['− Coluna', function () { if (o.rows[0].length > 1) { o.rows.forEach(function (r) { r.pop(); }); redo(o); } }], ['Cabeçalho', function () { o.header = !o.header; redo(o); }]].forEach(function (b) {
+  [['+ Linha', function () { addRow(o); }], ['− Linha', function () { if (o.rows.length > 1) { o.rows.pop(); if (o.rhs) o.rhs.pop(); redo(o); } }], ['+ Coluna', function () { o.rows.forEach(function (r) { r.push(''); }); o.cwf = null; redo(o); }],
+   ['− Coluna', function () { if (o.rows[0].length > 1) { o.rows.forEach(function (r) { r.pop(); }); o.cwf = null; redo(o); } }], ['Cabeçalho', function () { o.header = !o.header; redo(o); }]].forEach(function (b) {
     var bt = document.createElement('button'); bt.type = 'button'; bt.textContent = b[0]; if (b[0] === 'Cabeçalho' && o.header) bt.className = 'on';
     bt.addEventListener('pointerdown', function (e) { e.preventDefault(); });
     bt.addEventListener('click', b[1]); tb.appendChild(bt);
@@ -1150,7 +1328,7 @@ function tableEl(o) {
   el.appendChild(tb);
   return el;
 }
-function addRow(o) { o.rows.push(o.rows[0].map(function () { return ''; })); redo(o); }
+function addRow(o) { o.rows.push(o.rows[0].map(function () { return ''; })); if (o.rhs) o.rhs.push(o.rhs[o.rhs.length - 1]); redo(o); }
 function redo(o) { place(); save(); var el = layer.querySelector('[data-id="' + o.id + '"]'); if (el) el.classList.add('sel'); }
 O.addTable = function (rows, cols) {
   var r = []; for (var i = 0; i < rows; i++) { var row = []; for (var j = 0; j < cols; j++) row.push(''); r.push(row); }
@@ -1430,13 +1608,15 @@ function wrap(c, text, x, y, maxW, lh) {
   return y;
 }
 function drawTable(c, o, el) {
-  var rows = o.rows.length, cols = o.rows[0].length, fs = o.fs || 26, cw = o.w / cols, y = o.y, pad = 8;
+  var rows = o.rows.length, cols = o.rows[0].length, fs = o.fs || 26, y = o.y, pad = 8;
+  var cws = o.cwf && o.cwf.length === cols ? o.cwf.map(function (f) { return f * o.w; }) : o.rows[0].map(function () { return o.w / cols; }), xs = [0];
+  cws.forEach(function (w, i) { xs.push(xs[i] + w); });
   var trs = el ? el.querySelectorAll('tr') : [], sc = E.scale();
   for (var r = 0; r < rows; r++) {
     var head = r === 0 && o.header, dom = trs[r] ? trs[r].getBoundingClientRect().height / sc : 0;
     var rh = dom > 4 ? dom : fs * 1.35 + pad * 2;
     for (var j = 0; j < cols; j++) {
-      var x = o.x + j * cw;
+      var x = o.x + xs[j], cw = cws[j];
       c.save(); c.beginPath(); c.rect(x, y, cw, rh);
       c.fillStyle = head ? 'rgba(47,91,234,.14)' : 'rgba(255,255,255,.6)'; c.fill();
       c.strokeStyle = '#7a869a'; c.lineWidth = 1.5; c.stroke(); c.restore();
@@ -2149,9 +2329,16 @@ function listenBar() {
 /* ---------- Importar PDF para anotar ---------- */
 var pdfP = null;
 function loadScript(src) { return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
+function blobUrl(src) {
+  return fetch(src).then(function (r) {
+    if (!r.ok) { var e = new Error('http ' + r.status); e.missing = src; throw e; }
+    return r.blob();
+  }).then(function (b) { return URL.createObjectURL(new Blob([b], { type: 'text/javascript' })); });
+}
 function ensurePdf() {
-  if (window.pdfjsLib) return Promise.resolve();
-  if (!pdfP) pdfP = loadScript('vendorpdf.js').then(function () { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.js'; }).catch(function (e) { pdfP = null; throw e; });
+  if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions.workerSrc) return Promise.resolve();
+  if (!pdfP) pdfP = blobUrl('vendorpdf.js').then(loadScript).then(function () { return blobUrl('pdf.worker.js'); })
+    .then(function (u) { window.pdfjsLib.GlobalWorkerOptions.workerSrc = u; }).catch(function (e) { pdfP = null; throw e; });
   return pdfP;
 }
 CP.pdf = {
@@ -2180,7 +2367,14 @@ CP.pdf = {
         var n = CP.newNote(S.folder); n.title = (file.name || 'PDF').replace(/\.pdf$/i, ''); n.pages = bgs.length; n.bgs = bgs; n.paper = 'plain';
         S.notes.push(n); CP.queueSave(n); CP.ui.renderAll(); CP.ui.open(n.id); CP.toast('PDF pronto: escreva por cima com a Apple Pencil.');
       });
-    }).catch(function () { CP.toast('Não consegui abrir esse PDF. Na primeira vez é preciso estar online.'); });
+    }).catch(function (e) {
+      var m = e && e.missing ? 'Faltou o arquivo ' + e.missing + ' no GitHub. Envie vendorpdf.js e pdf.worker.js na pasta do Caderno.'
+        : (e && e.name === 'PasswordException') ? 'Esse PDF tem senha. Remova a senha e tente de novo.'
+        : (e && e.name === 'InvalidPDFException') ? 'Esse arquivo não é um PDF válido.'
+        : (navigator.onLine === false || (e && /fetch|network|load/i.test(String(e.message || e)))) ? 'Sem internet: abra o importar PDF uma vez online para guardar o leitor no aparelho.'
+        : 'Não consegui abrir esse PDF (' + String((e && (e.name || e.message)) || 'erro') + ').';
+      CP.toast(m);
+    });
   },
   pick: function () { pickFile('application/pdf,.pdf', function (f) { CP.pdf.importFile(f); }); }
 };
@@ -2268,7 +2462,7 @@ CP.saveNoteFile = function () {
   CP.toast('Preparando o arquivo…');
   CP.noteToFile(n).then(function (blob) {
     var name = (String(n.title || 'nota').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'nota') + '.caderno.json';
-    CP.ui.sheetMenu('<h3>Arquivo da nota pronto</h3><p style="margin:0 0 6px;color:var(--muted);font-size:14px;line-height:1.4;word-break:break-all">' + esc(name) + ' · ' + Math.max(1, Math.round(blob.size / 1024)) + ' KB<br>Salve em Arquivos ou no iCloud Drive para abrir em outro aparelho.</p>' +
+    CP.ui.sheetMenu('<h3>Cópia editável pronta</h3><p style="margin:0 0 6px;color:var(--muted);font-size:14px;line-height:1.4;word-break:break-all">' + esc(name) + ' · ' + Math.max(1, Math.round(blob.size / 1024)) + ' KB<br>Salve em Arquivos ou no iCloud Drive para abrir em outro aparelho.</p>' +
       '<button type="button" class="opt" id="nfS">' + CP.svgIcon('download') + 'Salvar ou compartilhar</button><button type="button" class="opt" id="nfX">Fechar</button>', function (h, close) {
       h.querySelector('#nfX').addEventListener('click', close);
       h.querySelector('#nfS').addEventListener('click', function () { CP.saveBlob(name, blob).then(close, function () { CP.toast('Não foi possível salvar.'); }); });
@@ -2297,8 +2491,23 @@ CP.pickNoteFile = function () { CP.pickFile('', function (f) { CP.openNoteFile(f
 (function () {
 'use strict';
 var CP = window.CP, $ = CP.$, S = CP.S;
+CP.diag = function () {
+  var list = ['index.html', 'sw.js', 'vendor3d.js', 'vendorpdf.js', 'pdf.worker.js', 'manifest.webmanifest', 'icon-192.png'];
+  CP.ui.sheetMenu('<h3>Diagnóstico · Caderno ' + CP.VERSION + '</h3><div id="dgL" style="font-size:15px;line-height:1.7">Verificando arquivos do site…</div><button type="button" class="opt" id="dgX">Fechar</button>', function (h, close) {
+    h.querySelector('#dgX').addEventListener('click', close);
+    Promise.all(list.map(function (f) {
+      return fetch(f + '?d=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.blob().then(function (b) { return [f, true, Math.round(b.size / 1024) + ' KB']; }) : [f, false, 'erro ' + r.status]; }).catch(function () { return [f, false, 'sem resposta']; });
+    })).then(function (rows) {
+      var bad = rows.filter(function (r) { return !r[1]; });
+      var html = rows.map(function (r) { return (r[1] ? '✅ ' : '❌ ') + CP.esc(r[0]) + ' <span style="color:var(--muted)">· ' + r[2] + '</span>'; }).join('<br>');
+      html += '<br><br>' + (bad.length ? '<b>Faltam arquivos no GitHub:</b> ' + bad.map(function (r) { return CP.esc(r[0]); }).join(', ') + '. Envie-os na pasta do Caderno.' : '<b>Tudo certo.</b> Todos os arquivos estão publicados.');
+      var el = h.querySelector('#dgL'); if (el) el.innerHTML = html;
+    });
+  });
+};
 CP.renderTools = function (closePops) {
   var host = $('#toolsGrid'); if (!host) return; host.innerHTML = '';
+  var th = $('#toolsH'); if (th) th.textContent = 'Ferramentas · Caderno ' + CP.VERSION;
   var z = Math.round((S.zoom || 1) * 100);
   var items = [
     ['ruler', 'Régua', CP.ruler.on, function () { CP.ruler.toggle(); }],
@@ -2311,8 +2520,9 @@ CP.renderTools = function (closePops) {
     ['copy', 'Modelos', false, function () { CP.templateMenu(); }],
     ['tag', 'Etiquetas', false, function () { CP.tagsMenu(); }],
     ['zoom', 'Zoom ' + z + '%', false, function () { CP.zoom.reset(); }],
-    ['download', 'Salvar nota', false, function () { CP.saveNoteFile(); }],
-    ['file', 'Abrir nota', false, function () { CP.pickNoteFile(); }]
+    ['download', 'Exportar PDF…', false, function () { CP.exportMenu(); }],
+    ['file', 'Abrir nota', false, function () { CP.pickNoteFile(); }],
+    ['tools', 'Diagnóstico', false, function () { CP.diag(); }]
   ];
   items.forEach(function (it) {
     var b = document.createElement('button'); b.type = 'button'; b.className = 'insbtn' + (it[2] ? ' on' : '');
@@ -2460,12 +2670,14 @@ function noteMenu() {
     html += '<div class="folder-h" style="padding:6px 4px">Mover para</div>' + S.folders.map(function (f) {
       return '<button type="button" class="opt" data-f="' + esc(f.id) + '">' + CP.svgIcon('folder') + esc(f.name) + (n.folder === f.id ? ' ✓' : '') + '</button>';
     }).join('');
-    html += '<button type="button" class="opt" id="mTags">' + CP.svgIcon('tag') + 'Etiquetas</button><button type="button" class="opt" id="mFile">' + CP.svgIcon('file') + 'Salvar nota como arquivo (.caderno)</button>';
+    html += '<button type="button" class="opt" id="mExp">' + CP.svgIcon('download') + 'Exportar (PDF, PNG, JPG, SVG, Markdown)</button>';
+    html += '<button type="button" class="opt" id="mTags">' + CP.svgIcon('tag') + 'Etiquetas</button><button type="button" class="opt" id="mFile">' + CP.svgIcon('file') + 'Salvar cópia editável (.json do Caderno)</button>';
     html += '<button type="button" class="opt" id="mDup">' + CP.svgIcon('copy') + 'Duplicar nota</button><button type="button" class="opt danger" id="mTrash">' + CP.svgIcon('trash') + 'Mover para a lixeira</button>';
   }
   sheetMenu(html, function (h, close) {
     $$('[data-f]', h).forEach(function (b) { b.addEventListener('click', function () { n.folder = b.getAttribute('data-f'); CP.queueSave(n); renderAll(); close(); }); });
     var on = function (id, fn) { var e = $('#' + id, h); if (e) e.addEventListener('click', function () { fn(); close(); }); };
+    on('mExp', function () { CP.exportMenu(); });
     on('mTags', function () { CP.tagsMenu(); });
     on('mFile', function () { CP.saveNoteFile(); });
     on('mTrash', function () { n.trash = true; CP.queueSave(n); UI.close(); renderAll(); CP.toast('Nota na lixeira'); });
@@ -2630,6 +2842,7 @@ function wire() {
   $('#title').addEventListener('input', function (e) { var n = CP.cur(); if (!n) return; n.title = e.target.value; CP.queueSave(n); CP.hooks.onChange(); });
   $('#btnUndo').addEventListener('click', function () { E.undo(); });
   $('#btnRedo').addEventListener('click', function () { E.redo(); });
+  $('#btnExpTop').addEventListener('click', function () { if (CP.exportMenu) CP.exportMenu(); });
   $('#btnFav').addEventListener('click', function () { var n = CP.cur(); if (!n) return; n.fav = !n.fav; CP.queueSave(n); syncTop(); UI.renderAll(); });
   $('#btnMore').addEventListener('click', UI.noteMenu);
   $('#btnAddPage').addEventListener('click', function () {
