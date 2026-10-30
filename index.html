@@ -242,6 +242,8 @@ html, body { overflow: hidden; }
 .tl-lab { position: absolute; left: 50%; top: 100%; transform: translate(-50%, 6px); font-size: 13px; font-weight: 700; color: var(--accent); background: var(--bar); padding: 2px 8px; border-radius: 10px; pointer-events: none; white-space: nowrap; }
 .lasso-box { border: 2px dashed var(--accent); border-radius: 6px; background: rgba(47,91,234,.06); z-index: 4; }
 .lasso-bar { display: flex !important; left: 0; top: -54px; }
+.lasso-box .scale.sw { right: -22px; bottom: auto; top: 50%; margin-top: -18px; background: #0f766e; }
+.lasso-box .scale.sh { bottom: -22px; right: auto; left: 50%; margin-left: -18px; background: #0f766e; }
 .lasso-box .scale { right: -22px; bottom: -22px; left: auto; top: auto; margin: 0; width: 36px; height: 36px; font-size: 18px; }
 .zoomchip { position: absolute; top: 64px; right: 16px; z-index: 5; padding: 8px 14px; border-radius: 18px; background: var(--bar); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 13px; font-weight: 600; color: var(--accent); min-height: 40px; }
 .audiobar { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 22px; background: var(--bar); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 14px; }
@@ -401,6 +403,9 @@ var ICONS = {
   download: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 20h14"/>',
   lasso: '<path d="M12 4c4.4 0 8 2 8 4.5S16.4 13 12 13 4 11 4 8.5 7.6 4 12 4z" stroke-dasharray="2.5 2.5"/><path d="M9 13c-1 2 0 3.5 1.5 4.5s1 2.5-1 3"/>',
   tools: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
+  shapes: '<rect x="3" y="3" width="8" height="8" rx="1.5"/><circle cx="17" cy="7" r="4"/><path d="M3 21l5-9 5 9z"/><path d="M15 21l6-4"/>',
+  calc: '<rect x="4" y="2.5" width="16" height="19" rx="2.5"/><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M6 16c3-9 6-9 8-4s4 3 6-6"/>',
   ruler: '<rect x="2.5" y="8" width="19" height="8" rx="1.5"/><path d="M6 8v3M10 8v4M14 8v3M18 8v4"/>',
   angle: '<path d="M4 19h16"/><path d="M4 19L16 7"/><path d="M10 19a6 6 0 00-1.6-4"/>',
   layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
@@ -568,7 +573,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&
 window.CP = { $: $, $$: $$, S: S, icon: icon, svgIcon: svgIcon, paintIcons: paintIcons, COLORS: COLORS, HL_COLORS: HL_COLORS, PAPERS: PAPERS,
   PAGE_W: PAGE_W, PAGE_H: PAGE_H, uid: uid, newNote: newNote, byId: byId, cur: cur, queueSave: queueSave, flushSave: flushSave,
   persistLocal: persistLocal, persistMeta: persistMeta, deleteForever: deleteForever, initStore: initStore, toast: toast,
-  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v11' };
+  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v12' };
 })();
 (function () {
 'use strict';
@@ -745,6 +750,7 @@ function apply(a, undo) {
     (undo ? a.list.slice().reverse() : a.list).forEach(function (x) { apply(x, undo); });
   } else if (a.t === 'mod') {
     a.items.forEach(function (it) { var f = undo ? it.from : it.to; it.s.d = f.d.slice(); it.s.c = f.c; it.s.l = f.l; if (f.l == null) delete it.s.l; });
+    if (a.txs && a.txs.length) { a.txs.forEach(function (o) { var f = undo ? o.from : o.to; o.t.x = f.x; o.t.y = f.y; }); placeTexts(); }
     if (CP.hooks.onModify) CP.hooks.onModify();
   } else if (a.t === 'tbl') {
     n.objs = n.objs || [];
@@ -942,6 +948,7 @@ function placeTexts() {
     b.style.left = tx.x * sc + 'px'; b.style.top = tx.y * sc + 'px'; b.style.width = tx.w * sc + 'px';
     var t = document.createElement('div'); t.className = 'tx'; t.contentEditable = 'true'; t.spellcheck = false;
     t.style.fontSize = tx.size * sc + 'px'; t.style.color = tx.c; t.textContent = tx.text;
+    if (tx.mono) { t.style.fontFamily = 'ui-monospace, Menlo, Consolas, monospace'; t.style.whiteSpace = 'pre'; t.style.lineHeight = '1.3'; t.style.overflowX = 'auto'; }
     var g = document.createElement('div'); g.className = 'grip'; g.innerHTML = CP.svgIcon('move');
     var d = document.createElement('button'); d.className = 'del'; d.type = 'button'; d.setAttribute('aria-label', 'Excluir texto'); d.innerHTML = CP.svgIcon('x');
     b.appendChild(g); b.appendChild(d); b.appendChild(t); texts.appendChild(b);
@@ -1767,8 +1774,8 @@ function compose(n, k, page) {
   n.strokes.forEach(function (s) { if (s.k !== 'h' && vis(s)) E.drawStroke(c, s); });
   E.setDark(CP.isDark(CP.cur()));
   n.texts.forEach(function (t) {
-    c.fillStyle = dark && t.c === '#14171c' ? '#f2f4f8' : t.c; c.font = t.size + 'px ' + FONT; c.textBaseline = 'alphabetic';
-    wrap(c, t.text, t.x + 6, t.y + 4 + t.size, t.w - 12, t.size * 1.35);
+    c.fillStyle = dark && t.c === '#14171c' ? '#f2f4f8' : t.c; c.font = t.size + 'px ' + (t.mono ? 'Menlo, ui-monospace, monospace' : FONT); c.textBaseline = 'alphabetic';
+    if (t.mono) { String(t.text).split('\n').forEach(function (ln, i) { c.fillText(ln, t.x + 6, t.y + 4 + t.size + i * t.size * 1.3); }); } else wrap(c, t.text, t.x + 6, t.y + 4 + t.size, t.w - 12, t.size * 1.35);
   });
   return cv;
 }
@@ -1818,7 +1825,7 @@ function buildSvg(n) {
   n.strokes.forEach(function (s) { if (s.k === 'h' && vis(s)) out.push(stroke(s)); });
   n.strokes.forEach(function (s) { if (s.k !== 'h' && vis(s)) out.push(stroke(s)); });
   n.texts.forEach(function (t) {
-    String(t.text).split('\n').forEach(function (line, i) { out.push('<text x="' + (t.x + 6) + '" y="' + (t.y + 4 + t.size * (1 + i * 1.35)) + '" font-family="sans-serif" font-size="' + t.size + '" fill="' + CP.esc(col(t.c)) + '">' + CP.esc(line) + '</text>'); });
+    String(t.text).split('\n').forEach(function (line, i) { out.push('<text x="' + (t.x + 6) + '" y="' + (t.y + 4 + t.size * (1 + i * 1.35)) + '" font-family="' + (t.mono ? 'monospace' : 'sans-serif') + '" xml:space="preserve" font-size="' + t.size + '" fill="' + CP.esc(col(t.c)) + '">' + CP.esc(line) + '</text>'); });
   });
   out.push('</svg>');
   return Promise.resolve(new Blob([out.join('\n')], { type: 'image/svg+xml' }));
@@ -2145,10 +2152,14 @@ CP.inits.push(function () {
 (function () {
 'use strict';
 var CP = window.CP, $ = CP.$, S = CP.S, E = CP.engine;
-var sel = [], box = null, ui = null, mode = null, path = [], start = null, snap = null, scaleH = null;
+var sel = [], box = null, ui = null, mode = null, path = [], start = null, snap = null, scaleH = null, tsn = [];
 function note() { return CP.cur(); }
 function sc() { return E.scale(); }
 function copyState(s) { return { d: s.d.slice(), c: s.c, l: s.l }; }
+/* textos do mesmo grupo (rótulos de gráfico, rascunhos) andam junto com os traços */
+function gtexts() { var n = note(), g = {}; sel.forEach(function (s) { if (s.g) g[s.g] = 1; }); return n.texts.filter(function (t) { return t.g && g[t.g]; }); }
+function txSnap() { return gtexts().map(function (t) { return { t: t, x: t.x, y: t.y }; }); }
+function txRec(ts) { return ts.map(function (o) { return { t: o.t, from: { x: o.x, y: o.y }, to: { x: o.t.x, y: o.t.y } }; }); }
 
 function inPoly(x, y, poly) {
   var ins = false;
@@ -2186,9 +2197,11 @@ function render() {
   var s = sc(); ui = document.createElement('div'); ui.className = 'tl lasso-box';
   ui.style.left = box.x0 * s + 'px'; ui.style.top = box.y0 * s + 'px'; ui.style.width = (box.x1 - box.x0) * s + 'px'; ui.style.height = (box.y1 - box.y0) * s + 'px';
   var bar = document.createElement('div'); bar.className = 'tbar lasso-bar';
-  bar.appendChild(btn('Excluir', del)); bar.appendChild(btn('Duplicar', dup)); bar.appendChild(btn('Cor', colorMenu)); bar.appendChild(btn('Camada', layerMenu)); bar.appendChild(btn('✕', clear));
+  bar.appendChild(btn('Excluir', del)); bar.appendChild(btn('Duplicar', dup)); bar.appendChild(btn('Medidas', sizeMenu)); bar.appendChild(btn('Cor', colorMenu)); bar.appendChild(btn('Camada', layerMenu)); bar.appendChild(btn('✕', clear));
   ui.appendChild(bar);
-  var h = document.createElement('div'); h.className = 'tl-h scale'; h.textContent = '⤡'; ui.appendChild(h); dragScale(h);
+  var h = document.createElement('div'); h.className = 'tl-h scale'; h.textContent = '⤡'; ui.appendChild(h); dragScale(h, 'p');
+  var hw = document.createElement('div'); hw.className = 'tl-h scale sw'; hw.textContent = '↔'; ui.appendChild(hw); dragScale(hw, 'x');
+  var hh = document.createElement('div'); hh.className = 'tl-h scale sh'; hh.textContent = '↕'; ui.appendChild(hh); dragScale(hh, 'y');
   $('#sheet').appendChild(ui);
 }
 function refresh() {
@@ -2197,24 +2210,51 @@ function refresh() {
 }
 function clear() { sel = []; box = null; mode = null; render(); }
 
-function commit(items) {
+function commit(items, ts) {
   var rec = items.map(function (it) { return { s: it.s, from: it.from, to: copyState(it.s) }; });
-  E.push({ t: 'mod', items: rec });
+  E.push({ t: 'mod', items: rec, txs: ts ? txRec(ts) : [] });
 }
 function del() {
-  var n = note(), list = [];
+  var n = note(), list = [], gt = gtexts();
   n.strokes.forEach(function (s, i) { if (sel.indexOf(s) >= 0) list.push({ s: s, i: i }); });
   n.strokes = n.strokes.filter(function (s) { return sel.indexOf(s) < 0; });
-  E.push({ t: 'del', list: list }); clear(); E.redraw();
+  n.texts = n.texts.filter(function (t) { return gt.indexOf(t) < 0; });
+  E.push({ t: 'multi', list: [{ t: 'del', list: list }].concat(gt.map(function (t) { return { t: 'tdel', tx: t }; })) });
+  clear(); if (E.placeTexts) E.placeTexts(); E.redraw();
 }
 function dup() {
-  var n = note(), subs = [], copies = [];
+  var n = note(), subs = [], copies = [], gmap = {}, gt = gtexts();
   sel.forEach(function (s) {
-    var c = JSON.parse(JSON.stringify(s)); delete c.t; delete c.ar;
+    var c = JSON.parse(JSON.stringify(s)); delete c.t; delete c.ar; if (c.g) { gmap[c.g] = gmap[c.g] || CP.uid(); c.g = gmap[c.g]; }
     for (var i = 0; i < c.d.length; i += 3) { c.d[i] += 40; c.d[i + 1] += 40; }
     n.strokes.push(c); subs.push({ t: 'add', s: c }); copies.push(c);
   });
-  E.push({ t: 'multi', list: subs }); sel = copies; bounds(); render(); E.redraw();
+  gt.forEach(function (t) { var c = JSON.parse(JSON.stringify(t)); c.id = CP.uid(); c.g = gmap[t.g]; c.x += 40; c.y += 40; n.texts.push(c); subs.push({ t: 'tadd', tx: c }); });
+  E.push({ t: 'multi', list: subs }); sel = copies; bounds(); render(); if (E.placeTexts) E.placeTexts(); E.redraw();
+}
+function scaleBy(fx, fy) {
+  var items = sel.map(function (s) { return { s: s, from: copyState(s) }; }), b0 = { x0: box.x0, y0: box.y0 }, ts = txSnap();
+  items.forEach(function (it) { for (var i = 0; i < it.s.d.length; i += 3) { it.s.d[i] = Math.round((b0.x0 + (it.from.d[i] - b0.x0) * fx) * 10) / 10; it.s.d[i + 1] = Math.round((b0.y0 + (it.from.d[i + 1] - b0.y0) * fy) * 10) / 10; } });
+  ts.forEach(function (o) { o.t.x = Math.round(b0.x0 + (o.x - b0.x0) * fx); o.t.y = Math.round(b0.y0 + (o.y - b0.y0) * fy); }); if (ts.length && E.placeTexts) E.placeTexts();
+  commit(items, ts); E.redraw(); bounds(); render();
+}
+function sizeMenu() {
+  var w = (box.x1 - box.x0) * 0.021, hgt = (box.y1 - box.y0) * 0.021, r = w / hgt;
+  function f(v) { return (Math.round(v * 100) / 100).toString().replace('.', ','); }
+  CP.ui.sheetMenu('<h3>Medidas da seleção</h3><label style="display:flex;gap:8px;align-items:center">Largura (cm)<input id="mW" type="text" inputmode="decimal" value="' + f(w) + '" style="flex:1;min-width:0"></label>' +
+    '<label style="display:flex;gap:8px;align-items:center">Altura (cm)<input id="mH" type="text" inputmode="decimal" value="' + f(hgt) + '" style="flex:1;min-width:0"></label>' +
+    '<label style="display:flex;gap:8px;align-items:center"><input id="mK" type="checkbox" style="min-height:0;width:20px;height:20px"> Manter a proporção</label>' +
+    '<div class="btns"><button type="button" id="mNo">Cancelar</button><button type="button" class="ok" id="mOk">Aplicar</button></div>', function (h, close) {
+    var iw = h.querySelector('#mW'), ih = h.querySelector('#mH'), kp = h.querySelector('#mK');
+    function num(el) { return parseFloat(String(el.value).replace(',', '.')); }
+    iw.addEventListener('input', function () { if (kp.checked && num(iw) > 0) ih.value = f(num(iw) / r); });
+    ih.addEventListener('input', function () { if (kp.checked && num(ih) > 0) iw.value = f(num(ih) * r); });
+    h.querySelector('#mNo').addEventListener('click', close);
+    h.querySelector('#mOk').addEventListener('click', function () {
+      var nw = num(iw), nh = num(ih); if (!(nw > 0.05) || !(nh > 0.05)) { CP.toast('Digite medidas maiores que zero.'); return; }
+      close(); scaleBy(nw / w, nh / hgt);
+    });
+  });
 }
 function colorMenu() {
   var cols = CP.COLORS.concat(CP.HL_COLORS);
@@ -2238,17 +2278,19 @@ function layerMenu() {
     });
   });
 }
-function dragScale(h) {
+function dragScale(h, axis) {
   h.addEventListener('pointerdown', function (ev) {
     ev.preventDefault(); ev.stopPropagation(); h.setPointerCapture(ev.pointerId);
-    var r = $('#sheet').getBoundingClientRect(), items = sel.map(function (s) { return { s: s, from: copyState(s) }; }), b0 = { x0: box.x0, y0: box.y0, x1: box.x1, y1: box.y1 };
+    var r = $('#sheet').getBoundingClientRect(), items = sel.map(function (s) { return { s: s, from: copyState(s) }; }), b0 = { x0: box.x0, y0: box.y0, x1: box.x1, y1: box.y1 }, ts = txSnap();
     function mv(m) {
       var qx = (m.clientX - r.left) / sc(), qy = (m.clientY - r.top) / sc();
-      var k = Math.max(0.1, Math.min(8, Math.max((qx - b0.x0) / (b0.x1 - b0.x0), (qy - b0.y0) / (b0.y1 - b0.y0))));
-      items.forEach(function (it) { for (var i = 0; i < it.s.d.length; i += 3) { it.s.d[i] = Math.round((b0.x0 + (it.from.d[i] - b0.x0) * k) * 10) / 10; it.s.d[i + 1] = Math.round((b0.y0 + (it.from.d[i + 1] - b0.y0) * k) * 10) / 10; } });
+      var kx = Math.max(0.05, Math.min(10, (qx - b0.x0) / (b0.x1 - b0.x0))), ky = Math.max(0.05, Math.min(10, (qy - b0.y0) / (b0.y1 - b0.y0))), fx = 1, fy = 1;
+      if (axis === 'x') fx = kx; else if (axis === 'y') fy = ky; else { fx = fy = Math.max(kx, ky); }
+      items.forEach(function (it) { for (var i = 0; i < it.s.d.length; i += 3) { it.s.d[i] = Math.round((b0.x0 + (it.from.d[i] - b0.x0) * fx) * 10) / 10; it.s.d[i + 1] = Math.round((b0.y0 + (it.from.d[i + 1] - b0.y0) * fy) * 10) / 10; } });
+      ts.forEach(function (o) { o.t.x = Math.round(b0.x0 + (o.x - b0.x0) * fx); o.t.y = Math.round(b0.y0 + (o.y - b0.y0) * fy); }); if (ts.length && E.placeTexts) E.placeTexts();
       E.redraw(); bounds(); var s = sc(); ui.style.width = (box.x1 - box.x0) * s + 'px'; ui.style.height = (box.y1 - box.y0) * s + 'px';
     }
-    function up() { h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up); commit(items); render(); }
+    function up() { h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up); commit(items, ts); render(); }
     h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
   });
 }
@@ -2257,7 +2299,7 @@ CP.lasso = {
   down: function (e) {
     var q = E.toLogical(e), pad = 14 / sc();
     if (box && q.x >= box.x0 - pad && q.x <= box.x1 + pad && q.y >= box.y0 - pad && q.y <= box.y1 + pad) {
-      mode = 'move'; start = q; snap = sel.map(function (s) { return { s: s, from: copyState(s) }; }); return;
+      mode = 'move'; start = q; snap = sel.map(function (s) { return { s: s, from: copyState(s) }; }); tsn = txSnap(); return;
     }
     clear(); mode = 'draw'; path = [q];
   },
@@ -2266,6 +2308,7 @@ CP.lasso = {
     if (mode === 'move') {
       var dx = q.x - start.x, dy = q.y - start.y;
       snap.forEach(function (it) { for (var i = 0; i < it.s.d.length; i += 3) { it.s.d[i] = Math.round((it.from.d[i] + dx) * 10) / 10; it.s.d[i + 1] = Math.round((it.from.d[i + 1] + dy) * 10) / 10; } });
+      tsn.forEach(function (o) { o.t.x = Math.round(o.x + dx); o.t.y = Math.round(o.y + dy); }); if (tsn.length && E.placeTexts) E.placeTexts();
       E.redraw(); bounds(); if (ui) { var s = sc(); ui.style.left = box.x0 * s + 'px'; ui.style.top = box.y0 * s + 'px'; }
     } else if (mode === 'draw') {
       var l = path[path.length - 1]; if (Math.hypot(q.x - l.x, q.y - l.y) < 3) return;
@@ -2275,7 +2318,7 @@ CP.lasso = {
     }
   },
   up: function () {
-    if (mode === 'move') { commit(snap); mode = null; render(); return; }
+    if (mode === 'move') { commit(snap, tsn); mode = null; render(); return; }
     if (mode === 'draw') {
       E.drawLive(null); mode = null;
       if (path.length < 4) return;
@@ -2284,6 +2327,7 @@ CP.lasso = {
     }
   },
   clear: clear, refresh: refresh,
+  select: function (arr) { sel = arr.slice(); bounds(); render(); },
   get count() { return sel.length; }, _pick: pick, _inPoly: inPoly
 };
 CP.hooks.onModify = refresh;
@@ -2649,6 +2693,9 @@ CP.renderTools = function (closePops) {
   var th = $('#toolsH'); if (th) th.textContent = 'Ferramentas · Caderno ' + CP.VERSION;
   var z = Math.round((S.zoom || 1) * 100);
   var items = [
+    ['shapes', 'Formas', false, function () { CP.shapesMenu(); }],
+    ['calc', 'Resolver', false, function () { CP.solveMenu(); }],
+    ['chart', 'Gráfico', false, function () { CP.graphMenu(); }],
     ['ruler', 'Régua', CP.ruler.on, function () { CP.ruler.toggle(); }],
     ['angle', 'Transferidor', CP.proto.on, function () { CP.proto.toggle(); }],
     ['all', 'Páginas', false, function () { CP.pages.menu(); }],
@@ -2670,6 +2717,943 @@ CP.renderTools = function (closePops) {
     host.appendChild(b);
   });
 };
+})();
+(function () {
+'use strict';
+var CP = window.CP;
+
+/* ================= números ================= */
+var MINUS = '−';
+function clean(v) { return Math.round(v * 1e9) / 1e9; }
+function fmt(v) {
+  if (!isFinite(v)) return isNaN(v) ? 'indefinido' : (v < 0 ? MINUS + '∞' : '∞');
+  var r = clean(v); if (r === 0) r = 0;
+  var s;
+  if (Math.abs(r) >= 1e15 || (Math.abs(r) < 1e-6 && r !== 0)) s = r.toExponential(4); else s = String(r);
+  if (s.indexOf('e') >= 0 && Math.abs(r) < 1e15 && Math.abs(r) >= 1e-6) s = r.toFixed(9).replace(/0+$/, '').replace(/\.$/, '');
+  return s.replace('-', MINUS).replace('.', ',');
+}
+function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { var t = a % b; a = b; b = t; } return a; }
+function toFrac(v, maxQ) {
+  maxQ = maxQ || 1000;
+  if (!isFinite(v)) return null;
+  if (Math.abs(v - Math.round(v)) < 1e-9) return [Math.round(v), 1];
+  for (var q = 2; q <= maxQ; q++) { var p = Math.round(v * q); if (Math.abs(v - p / q) < 1e-9 * Math.max(1, Math.abs(v))) { var g = gcd(p, q); return [p / g, q / g]; } }
+  return null;
+}
+function fracStr(v) {
+  var f = toFrac(v, 1000);
+  if (!f || f[1] === 1) return fmt(v);
+  return (f[0] < 0 ? MINUS : '') + Math.abs(f[0]) + '/' + f[1];
+}
+/* mostra "5/2 = 2,5" quando for fração simples */
+function nice(v) {
+  var f = toFrac(v, 1000);
+  if (f && f[1] !== 1) return fracStr(v) + ' = ' + fmt(v);
+  return fmt(v);
+}
+var SUP = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
+function sup(n) { return String(n).split('').map(function (c) { return SUP[c] || c; }).join(''); }
+
+/* ================= analisador ================= */
+var FUNCS = ['asin', 'acos', 'atan', 'sqrt', 'raiz', 'sinh', 'cosh', 'tanh', 'sen', 'sin', 'cos', 'tan', 'tg', 'ln', 'log', 'exp', 'abs'];
+function normalize(s) {
+  s = String(s).replace(/\s+/g, ' ').trim();
+  s = s.replace(/[–—−]/g, '-').replace(/[×·∙]/g, '*').replace(/[÷:]/g, '/').replace(/,/g, '.').replace(/√/g, 'sqrt').replace(/π/g, 'pi').replace(/\*\*/g, '^');
+  s = s.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, function (m) { var map = '⁰¹²³⁴⁵⁶⁷⁸⁹', o = ''; for (var i = 0; i < m.length; i++) o += map.indexOf(m[i]); return '^' + o; });
+  s = s.replace(/(\d+(?:\.\d+)?)\s*°/g, '($1*pi/180)').replace(/°/g, '*pi/180');
+  return s;
+}
+function tokenize(s) {
+  var t = [], i = 0, m;
+  while (i < s.length) {
+    var ch = s[i];
+    if (ch === ' ') { i++; continue; }
+    if ((m = /^\d+(\.\d+)?|^\.\d+/.exec(s.slice(i)))) { t.push({ k: 'n', v: parseFloat(m[0]), raw: m[0] }); i += m[0].length; continue; }
+    if (/[a-zA-Z]/.test(ch)) {
+      var run = /^[a-zA-Z]+/.exec(s.slice(i))[0], low = run.toLowerCase(), done = false;
+      for (var f = 0; f < FUNCS.length; f++) if (low.indexOf(FUNCS[f]) === 0 && s[i + FUNCS[f].length] === '(') { t.push({ k: 'f', v: FUNCS[f] }); i += FUNCS[f].length; done = true; break; }
+      if (done) continue;
+      if (low.indexOf('pi') === 0) { t.push({ k: 'c', v: 'pi' }); i += 2; continue; }
+      t.push(ch === 'e' ? { k: 'c', v: 'e' } : { k: 'v', v: ch.toLowerCase() }); i++; continue;
+    }
+    if ('+-*/^()%'.indexOf(ch) >= 0) { t.push({ k: 'o', v: ch }); i++; continue; }
+    throw new Error('Não entendi o símbolo "' + ch + '".');
+  }
+  return t;
+}
+function parse(src) {
+  var tk = tokenize(normalize(src)), p = 0;
+  function peek() { return tk[p]; }
+  function isOp(v) { return tk[p] && tk[p].k === 'o' && tk[p].v === v; }
+  function expr() {
+    var a = term();
+    while (isOp('+') || isOp('-')) { var op = tk[p++].v; a = { t: 'bin', op: op, a: a, b: term() }; }
+    return a;
+  }
+  function startsAtom() { var x = peek(); return x && (x.k === 'n' || x.k === 'v' || x.k === 'c' || x.k === 'f' || (x.k === 'o' && x.v === '(')); }
+  function term() {
+    var a = unary();
+    for (;;) {
+      if (isOp('*') || isOp('/')) { var op = tk[p++].v; a = { t: 'bin', op: op, a: a, b: unary() }; }
+      else if (startsAtom()) { a = { t: 'bin', op: '*', imp: true, a: a, b: power() }; }
+      else break;
+    }
+    return a;
+  }
+  function unary() {
+    if (isOp('-')) { p++; return { t: 'neg', a: unary() }; }
+    if (isOp('+')) { p++; return unary(); }
+    return power();
+  }
+  function power() {
+    var a = atom();
+    while (isOp('%')) { p++; a = { t: 'bin', op: '/', a: a, b: { t: 'num', v: 100 } }; }
+    if (isOp('^')) { p++; var e = unary(); return { t: 'bin', op: '^', a: a, b: e }; }
+    return a;
+  }
+  function atom() {
+    var x = tk[p++];
+    if (!x) throw new Error('A expressão terminou antes da hora.');
+    if (x.k === 'n') return { t: 'num', v: x.v, raw: x.raw };
+    if (x.k === 'v') return { t: 'var', n: x.v };
+    if (x.k === 'c') return { t: 'num', v: x.v === 'pi' ? Math.PI : Math.E, c: x.v };
+    if (x.k === 'f') { if (!isOp('(')) throw new Error('Faltou "(" depois de ' + x.v + '.'); p++; var a = expr(); if (!isOp(')')) throw new Error('Faltou fechar parênteses.'); p++; return { t: 'fn', n: x.v, a: a }; }
+    if (x.k === 'o' && x.v === '(') { var e = expr(); if (!isOp(')')) throw new Error('Faltou fechar parênteses.'); p++; return { t: 'par', a: e }; }
+    throw new Error('Não entendi perto de "' + x.v + '".');
+  }
+  var r = expr();
+  if (p < tk.length) throw new Error('Sobrou algo no fim: "' + tk[p].v + '".');
+  return r;
+}
+function fnEval(n, v) {
+  switch (n) {
+    case 'sqrt': case 'raiz': return Math.sqrt(v);
+    case 'sen': case 'sin': return Math.sin(v);
+    case 'cos': return Math.cos(v);
+    case 'tan': case 'tg': return Math.tan(v);
+    case 'asin': return Math.asin(v); case 'acos': return Math.acos(v); case 'atan': return Math.atan(v);
+    case 'sinh': return Math.sinh(v); case 'cosh': return Math.cosh(v); case 'tanh': return Math.tanh(v);
+    case 'ln': return Math.log(v); case 'log': return Math.log10(v);
+    case 'exp': return Math.exp(v); case 'abs': return Math.abs(v);
+  }
+  return NaN;
+}
+function ev(a, env) {
+  switch (a.t) {
+    case 'num': return a.v;
+    case 'var': return env && env[a.n] != null ? env[a.n] : NaN;
+    case 'par': return ev(a.a, env);
+    case 'neg': return -ev(a.a, env);
+    case 'fn': return fnEval(a.n, ev(a.a, env));
+    case 'bin': {
+      var x = ev(a.a, env), y = ev(a.b, env);
+      switch (a.op) { case '+': return x + y; case '-': return x - y; case '*': return x * y; case '/': return x / y; case '^': return Math.pow(x, y); }
+    }
+  }
+  return NaN;
+}
+function vars(a, set) {
+  set = set || {};
+  if (a.t === 'var') set[a.n] = 1; else { if (a.a) vars(a.a, set); if (a.b) vars(a.b, set); }
+  return set;
+}
+function compile(src) { var ast = parse(src); return function (x, y) { return ev(ast, { x: x, y: y }); }; }
+
+/* ================= escrita ================= */
+function show(a) {
+  switch (a.t) {
+    case 'num': return a.c ? (a.c === 'pi' ? 'π' : 'e') : fmt(a.v);
+    case 'var': return a.n;
+    case 'par': return '(' + show(a.a) + ')';
+    case 'neg': return MINUS + show(a.a);
+    case 'fn': return a.n + '(' + show(a.a) + ')';
+    case 'bin': {
+      if (a.op === '^') return show(a.a) + (a.b.t === 'num' && a.b.v >= 0 && a.b.v < 10 && a.b.v % 1 === 0 ? sup(a.b.v) : '^' + show(a.b));
+      if (a.op === '*' && a.imp && a.a.t === 'num' && a.b.t !== 'num') return show(a.a) + show(a.b);
+      var sym = { '+': ' + ', '-': ' ' + MINUS + ' ', '*': ' × ', '/': ' ÷ ' }[a.op];
+      return show(a.a) + sym + show(a.b);
+    }
+  }
+  return '?';
+}
+
+/* ================= passo a passo de uma conta ================= */
+function isNum(a) { return a.t === 'num' || (a.t === 'neg' && a.a.t === 'num'); }
+function numVal(a) { return a.t === 'neg' ? -a.a.v : a.v; }
+function hasPar(a) { return a.t === 'par' || (a.a && hasPar(a.a)) || (a.b && hasPar(a.b)); }
+function reduce(a) {
+  if (isNum(a)) return null;
+  if (a.t === 'par') {
+    if (isNum(a.a)) return numNode(numVal(a.a));
+    var r = reduce(a.a); return r && { t: 'par', a: r };
+  }
+  if (a.t === 'neg') { var rn = reduce(a.a); return rn && { t: 'neg', a: rn }; }
+  if (a.t === 'fn') {
+    if (isNum(a.a)) return numNode(fnEval(a.n, numVal(a.a)));
+    var rf = reduce(a.a); return rf && { t: 'fn', n: a.n, a: rf };
+  }
+  if (a.t === 'bin') {
+    if (hasPar(a)) {
+      if (hasPar(a.a)) { var l = reduce(a.a); if (l) return { t: 'bin', op: a.op, imp: a.imp, a: l, b: a.b }; }
+      if (hasPar(a.b)) { var rr = reduce(a.b); if (rr) return { t: 'bin', op: a.op, imp: a.imp, a: a.a, b: rr }; }
+    }
+    if (!isNum(a.a)) { var l2 = reduce(a.a); if (l2) return { t: 'bin', op: a.op, imp: a.imp, a: l2, b: a.b }; }
+    if (!isNum(a.b)) { var r2 = reduce(a.b); if (r2) return { t: 'bin', op: a.op, imp: a.imp, a: a.a, b: r2 }; }
+    return numNode(ev({ t: 'bin', op: a.op, a: numNode(numVal(a.a)), b: numNode(numVal(a.b)) }));
+  }
+  return null;
+}
+function numNode(v) { return v < 0 ? { t: 'neg', a: { t: 'num', v: -v } } : { t: 'num', v: v }; }
+function stepsOf(ast) {
+  var lines = [show(ast)], cur = ast, guard = 0;
+  while (guard++ < 40) {
+    var nx = reduce(cur); if (!nx) break;
+    cur = nx; lines.push('= ' + show(cur));
+  }
+  return { lines: lines, value: ev(ast) };
+}
+
+/* ================= contas armadas ================= */
+function pad(s, w) { s = String(s); while (s.length < w) s = ' ' + s; return s; }
+function rep(c, n) { var s = ''; while (n-- > 0) s += c; return s; }
+var COLN = ['unidades', 'dezenas', 'centenas', 'milhares', 'dezenas de milhar', 'centenas de milhar', 'milhões', 'dezenas de milhão'];
+var FRACN = ['décimos', 'centésimos', 'milésimos', 'décimos de milésimo', 'cem-milésimos'];
+function decOf(raw) { var i = raw.indexOf('.'); return i < 0 ? 0 : raw.length - i - 1; }
+function digitsOf(raw, F) { var ip = raw.split('.')[0], fp = (raw.split('.')[1] || ''); while (fp.length < F) fp += '0'; return (ip + fp).replace(/^0+(?=\d)/, ''); }
+function trimZ(t) { return t.indexOf(',') < 0 ? t : t.replace(/0+$/, '').replace(/,$/, ''); }
+function withComma(digits, F) {
+  if (!F) return digits;
+  while (digits.length <= F) digits = '0' + digits;
+  return digits.slice(0, digits.length - F) + ',' + digits.slice(digits.length - F);
+}
+function colName(k, F) { return k < F ? (FRACN[F - 1 - k] || 'casa decimal') : (COLN[k - F] || 'casa ' + (k - F + 1)); }
+
+function vAdd(raws) {
+  var F = Math.max.apply(null, raws.map(decOf)), ds = raws.map(function (r) { return digitsOf(r, F); }), L = Math.max.apply(null, ds.map(function (d) { return d.length; }));
+  var carry = 0, out = [], carries = [], notes = [];
+  for (var k = 0; k < L; k++) {
+    var sum = carry, parts = [];
+    ds.forEach(function (d) { var c = d.length - 1 - k >= 0 ? +d[d.length - 1 - k] : 0; sum += c; parts.push(c); });
+    var wr = sum % 10, nc = Math.floor(sum / 10);
+    notes.push(colName(k, F) + ': ' + parts.join(' + ') + (carry ? ' + ' + carry + ' (vai um)' : '') + ' = ' + sum + (nc ? ' → escreve ' + wr + ' e vai ' + nc : ' → escreve ' + wr));
+    out.unshift(wr); carries[k + 1] = nc; carry = nc;
+  }
+  if (carry) out.unshift(carry);
+  var res = out.join(''), shown = ds.map(function (d) { return withComma(d, F); }), rs = withComma(res, F), W = Math.max(rs.length, shown[0].length) + 2;
+  W = Math.max(W, rs.length + 2, Math.max.apply(null, shown.map(function (s) { return s.length; })) + 2);
+  function idxOf(k, len) { return len - 1 - k - (F && k >= F ? 1 : 0); }
+  var cr = rep(' ', W).split(''), any = false;
+  for (var c2 = 1; c2 < carries.length; c2++) if (carries[c2] && c2 < L + 0) { var pos = W - 1 - c2 - (F && c2 >= F ? 1 : 0); if (pos >= 0) { cr[pos] = String(carries[c2]); any = true; } }
+  var lines = [];
+  if (any) lines.push(cr.join('').replace(/\s+$/, ''));
+  shown.forEach(function (s, i) { lines.push((i === shown.length - 1 ? '+' : ' ') + pad(s, W - 1)); });
+  lines.push(rep('-', W));
+  lines.push(' ' + pad(rs, W - 1));
+  return { lines: lines, notes: notes, value: +(res / Math.pow(10, F)), text: trimZ(rs) };
+}
+function vSub(rawA, rawB) {
+  var F = Math.max(decOf(rawA), decOf(rawB)), a = digitsOf(rawA, F), b = digitsOf(rawB, F), neg = false;
+  function big(x, y) { if (x.length !== y.length) return x.length > y.length; return x >= y; }
+  if (!big(a, b)) { var t = a; a = b; b = t; neg = true; var tr = rawA; rawA = rawB; rawB = tr; }
+  var L = a.length, out = [], borrow = 0, notes = [];
+  for (var k = 0; k < L; k++) {
+    var da = +a[a.length - 1 - k] - borrow, db = b.length - 1 - k >= 0 ? +b[b.length - 1 - k] : 0, bw = 0;
+    var top = da; if (da < db) { top = da + 10; bw = 1; }
+    notes.push(colName(k, F) + ': ' + (borrow ? (top - 10 * bw + borrow) + ' (emprestou 1 antes) → ' : '') + top + ' ' + MINUS + ' ' + db + ' = ' + (top - db) + (bw ? ' (pediu 10 emprestado)' : ''));
+    out.unshift(top - db); borrow = bw;
+  }
+  var res = out.join('').replace(/^0+(?=\d)/, ''), sa = withComma(a, F), sb = withComma(b.replace(/^0+(?=\d)/, ''), F), rs = withComma(res, F);
+  var W = Math.max(sa.length, sb.length, rs.length) + 2, lines = [' ' + pad(sa, W - 1), MINUS + pad(sb, W - 1), rep('-', W), ' ' + pad(rs, W - 1)];
+  if (neg) { notes.push('Como o primeiro número é menor, o resultado é negativo: ' + MINUS + rs); }
+  return { lines: lines, notes: notes, value: (neg ? -1 : 1) * (res / Math.pow(10, F)), text: (neg ? MINUS : '') + trimZ(rs) };
+}
+function vMul(rawA, rawB) {
+  var fa = decOf(rawA), fb = decOf(rawB), a = digitsOf(rawA, fa), b = digitsOf(rawB, fb), notes = [], parts = [];
+  var prod = String(BigInt(a) * BigInt(b));
+  for (var k = 0; k < b.length; k++) {
+    var d = +b[b.length - 1 - k], p = String(BigInt(a) * BigInt(d));
+    parts.push({ s: p, shift: k, d: d });
+    notes.push(a + ' × ' + d + (k ? ' (' + COLN[k] + ')' : '') + ' = ' + p + (k ? ' → desloca ' + k + ' casa' + (k > 1 ? 's' : '') + ' à esquerda' : ''));
+  }
+  var W = Math.max(prod.length, a.length, b.length + 1) + 2, lines = [' ' + pad(a, W - 1), '×' + pad(b, W - 1), rep('-', W)];
+  if (parts.length === 1) { lines.push(' ' + pad(prod, W - 1)); }
+  else {
+    parts.forEach(function (p) { lines.push(' ' + pad(p.s + rep(' ', p.shift), W - 1)); });
+    lines.push(rep('-', W)); lines.push(' ' + pad(prod, W - 1));
+  }
+  var F = fa + fb;
+  if (F) { notes.unshift('Ignorando as vírgulas: ' + a + ' × ' + b); notes.push('Casas decimais: ' + fa + ' + ' + fb + ' = ' + F + ' → coloco a vírgula ' + F + ' casa' + (F > 1 ? 's' : '') + ' da direita para a esquerda: ' + withComma(prod, F)); }
+  return { lines: lines, notes: notes, value: +(prod / Math.pow(10, F)), text: trimZ(withComma(prod, F)) };
+}
+function vDiv(rawA, rawB) {
+  var F = Math.max(decOf(rawA), decOf(rawB)), a = digitsOf(rawA, F), b = digitsOf(rawB, F), notes = [];
+  if (+b === 0) return { error: 'Divisão por zero não existe.' };
+  if (F) notes.push('Multipliquei os dois por ' + Math.pow(10, F) + ' para tirar a vírgula: ' + a + ' ÷ ' + b);
+  var bn = BigInt(b), q = '', rem = 0n, steps = [], i, started = false, dec = 0, MAXD = 4;
+  var pos = 0;
+  for (i = 0; i < a.length; i++) {
+    rem = rem * 10n + BigInt(a[i]); var qd = rem / bn, sub = qd * bn;
+    if (qd > 0n || started || i === a.length - 1) { started = true; q += String(qd); steps.push({ col: i, sub: String(sub), rem: String(rem - sub), idx: i }); }
+    rem = rem - sub;
+    if (qd === 0n && !started) continue;
+    notes.push('Desce ' + a[i] + ': ' + (qd * bn + rem) + ' ÷ ' + b + ' = ' + qd + ' (' + qd + ' × ' + b + ' = ' + sub + '), sobra ' + rem);
+  }
+  var qs = q.replace(/^0+(?=\d)/, ''), extra = '';
+  var dstep = [];
+  if (rem !== 0n) {
+    notes.push('Sobrou ' + rem + '. Coloco vírgula no quociente e desço zeros:');
+    for (dec = 0; dec < MAXD && rem !== 0n; dec++) {
+      rem = rem * 10n; var q2 = rem / bn, s2 = q2 * bn; extra += String(q2); dstep.push({ sub: String(s2), rem: String(rem - s2) });
+      notes.push('  ' + rem + ' ÷ ' + b + ' = ' + q2 + ' (sobra ' + (rem - s2) + ')'); rem = rem - s2;
+    }
+  }
+  var quot = qs + (extra ? ',' + extra : ''), approx = rem !== 0n;
+  /* desenho */
+  var nd = dstep.length, Dshow = a + (nd ? ',' + rep('0', nd) : ''), lines = [];
+  var right = ['| ' + b, '|' + rep('-', Math.max(3, b.length + 1)), '| ' + quot];
+  var left = [' ' + Dshow];
+  var all = steps.map(function (s) { return { col: s.idx, sub: s.sub, rem: s.rem }; });
+  dstep.forEach(function (s, k) { all.push({ col: a.length + 1 + k, sub: s.sub, rem: s.rem }); });
+  all.forEach(function (s, k) {
+    left.push(pad(MINUS + s.sub, s.col + 2));
+    var nx = all[k + 1];
+    left.push(nx ? pad(s.rem + (nx.col === s.col + 1 ? Dshow[nx.col] : Dshow[nx.col]), nx.col + 2) : pad(s.rem, s.col + 2));
+  });
+  var lw = Math.max.apply(null, left.map(function (l) { return l.length; }));
+  left.forEach(function (l, k) { var r = right[k] != null ? ' ' + right[k] : ''; lines.push(l + rep(' ', lw - l.length) + r); });
+  return { lines: lines, notes: notes, value: +(quot.replace(',', '.')), text: (approx ? '≈ ' : '') + quot, approx: approx };
+}
+
+/* ================= polinômios ================= */
+function pTrim(c) { c = c.slice(); while (c.length > 1 && Math.abs(c[c.length - 1]) < 1e-12) c.pop(); return c; }
+function pAdd(a, b) { var n = Math.max(a.length, b.length), o = []; for (var i = 0; i < n; i++) o.push((a[i] || 0) + (b[i] || 0)); return pTrim(o); }
+function pSub(a, b) { return pAdd(a, b.map(function (x) { return -x; })); }
+function pMul(a, b) { var o = []; for (var i = 0; i < a.length + b.length - 1; i++) o.push(0); a.forEach(function (x, i) { b.forEach(function (y, j) { o[i + j] += x * y; }); }); return pTrim(o); }
+function toPoly(a, vn) {
+  if (!vars(a)[vn] && Object.keys(vars(a)).length === 0) { var v = ev(a); return isFinite(v) ? [v] : null; }
+  switch (a.t) {
+    case 'var': return a.n === vn ? [0, 1] : null;
+    case 'par': return toPoly(a.a, vn);
+    case 'neg': { var p = toPoly(a.a, vn); return p && p.map(function (x) { return -x; }); }
+    case 'bin': {
+      var x = toPoly(a.a, vn), y = toPoly(a.b, vn); if (!x || !y) return null;
+      if (a.op === '+') return pAdd(x, y); if (a.op === '-') return pSub(x, y); if (a.op === '*') return pMul(x, y);
+      if (a.op === '/') { if (y.length !== 1 || y[0] === 0) return null; return pTrim(x.map(function (c) { return c / y[0]; })); }
+      if (a.op === '^') { if (y.length !== 1 || y[0] < 0 || y[0] % 1 || y[0] > 12) return null; var r = [1]; for (var i = 0; i < y[0]; i++) r = pMul(r, x); return r; }
+    }
+  }
+  return null;
+}
+function term(c, k, vn, first) {
+  if (Math.abs(c) < 1e-12) return '';
+  var neg = c < 0, ab = Math.abs(c), body;
+  if (k === 0) body = fmt(ab); else body = (Math.abs(ab - 1) < 1e-12 ? '' : fmt(ab)) + vn + (k > 1 ? sup(k) : '');
+  return first ? (neg ? MINUS : '') + body : (neg ? ' ' + MINUS + ' ' : ' + ') + body;
+}
+function polyStr(c, vn) {
+  var s = '', first = true;
+  for (var k = c.length - 1; k >= 0; k--) { var t = term(c[k], k, vn || 'x', first); if (t) { s += t; first = false; } }
+  return s || '0';
+}
+function pEval(c, x) { var r = 0; for (var i = c.length - 1; i >= 0; i--) r = r * x + c[i]; return r; }
+function durandKerner(c) {
+  var n = c.length - 1, a = c.map(function (x) { return x / c[n]; }), r = [];
+  for (var i = 0; i < n; i++) { var ang = 2 * Math.PI * i / n + 0.4; r.push([Math.cos(ang) * (1 + i * 0.3), Math.sin(ang) * (1 + i * 0.3)]); }
+  function cm(x, y) { return [x[0] * y[0] - x[1] * y[1], x[0] * y[1] + x[1] * y[0]]; }
+  function cd(x, y) { var d = y[0] * y[0] + y[1] * y[1] || 1e-300; return [(x[0] * y[0] + x[1] * y[1]) / d, (x[1] * y[0] - x[0] * y[1]) / d]; }
+  for (var it = 0; it < 400; it++) {
+    var mx = 0;
+    for (var i2 = 0; i2 < n; i2++) {
+      var pv = [0, 0]; for (var kk = n; kk >= 0; kk--) { pv = cm(pv, r[i2]); pv[0] += a[kk]; }
+      var den = [1, 0]; for (var j = 0; j < n; j++) if (j !== i2) den = cm(den, [r[i2][0] - r[j][0], r[i2][1] - r[j][1]]);
+      var d = cd(pv, den); r[i2] = [r[i2][0] - d[0], r[i2][1] - d[1]]; mx = Math.max(mx, Math.hypot(d[0], d[1]));
+    }
+    if (mx < 1e-13) break;
+  }
+  return r;
+}
+function divisors(n) { n = Math.abs(Math.round(n)); var o = []; if (n === 0) return [1]; for (var i = 1; i * i <= n && i < 1e6; i++) if (n % i === 0) { o.push(i); if (i * i !== n) o.push(n / i); } return o.sort(function (a, b) { return a - b; }); }
+function intScale(c) {
+  var den = 1; for (var i = 0; i < c.length; i++) { var f = toFrac(c[i], 1000); if (!f) return null; den = den / gcd(den, f[1]) * f[1]; if (den > 1e6) return null; }
+  return c.map(function (x) { return Math.round(x * den); });
+}
+function rootStr(r) { var f = toFrac(r, 1000); return f && f[1] !== 1 ? fracStr(r) + ' = ' + fmt(r) : fmt(r); }
+function complexStr(re, im) { return fmt(re) + (im < 0 ? ' ' + MINUS + ' ' : ' + ') + (Math.abs(Math.abs(im) - 1) < 1e-9 ? '' : fmt(Math.abs(im))) + 'i'; }
+
+/* resolve p(x)=0 mostrando os passos; devolve { lines, roots:[{re,im}] } */
+function solvePoly(c, vn, L) {
+  c = pTrim(c); var deg = c.length - 1, roots = [];
+  if (deg === 0) { L.push(Math.abs(c[0]) < 1e-12 ? 'Toda ' + vn + ' é solução (identidade).' : 'Impossível: ' + fmt(c[0]) + ' = 0 é falso. Sem solução.'); return roots; }
+  /* raízes zero */
+  var z = 0; while (Math.abs(c[0]) < 1e-12 && c.length > 1) { c = c.slice(1); z++; }
+  if (z) { L.push('Colocando ' + vn + (z > 1 ? sup(z) : '') + ' em evidência: ' + vn + (z > 1 ? sup(z) : '') + '(' + polyStr(c, vn) + ') = 0'); L.push(vn + (z > 1 ? sup(z) : '') + ' = 0 → ' + vn + ' = 0'); roots.push({ re: 0, im: 0 }); }
+  deg = c.length - 1;
+  if (deg === 0) return roots;
+  if (deg === 1) {
+    var a = c[1], b = c[0];
+    L.push('Equação do 1º grau: ' + term(a, 1, vn, true) + term(b, 0, vn, false) + ' = 0');
+    L.push(term(a, 1, vn, true) + ' = ' + fmt(-b)); if (Math.abs(a - 1) > 1e-12) L.push(vn + ' = ' + fmt(-b) + ' ÷ ' + (a < 0 ? '(' + fmt(a) + ')' : fmt(a)));
+    var r1 = -b / a; L.push(vn + ' = ' + nice(r1)); roots.push({ re: r1, im: 0 }); return roots;
+  }
+  if (deg === 2) {
+    var qa = c[2], qb = c[1], qc = c[0], D = qb * qb - 4 * qa * qc;
+    L.push('Equação do 2º grau: ' + polyStr(c, vn) + ' = 0');
+    L.push('a = ' + fmt(qa) + ',  b = ' + fmt(qb) + ',  c = ' + fmt(qc));
+    L.push('Δ = b² ' + MINUS + ' 4·a·c');
+    L.push('Δ = (' + fmt(qb) + ')² ' + MINUS + ' 4·(' + fmt(qa) + ')·(' + fmt(qc) + ')');
+    L.push('Δ = ' + fmt(qb * qb) + ' ' + (4 * qa * qc < 0 ? '+ ' + fmt(-4 * qa * qc) : MINUS + ' ' + fmt(4 * qa * qc)) + ' = ' + fmt(D));
+    if (Math.abs(D) < 1e-9) {
+      L.push('Δ = 0 → uma raiz real (dupla)'); L.push(vn + ' = ' + MINUS + 'b / 2a = ' + fmt(-qb) + ' / ' + fmt(2 * qa));
+      var rd = -qb / (2 * qa); L.push(vn + ' = ' + nice(rd)); roots.push({ re: rd, im: 0 }); roots.push({ re: rd, im: 0, dup: true });
+    } else if (D > 0) {
+      var sq = Math.sqrt(D), exact = Math.abs(sq - Math.round(sq)) < 1e-9;
+      L.push('Δ > 0 → duas raízes reais diferentes');
+      L.push(vn + ' = (' + MINUS + 'b ± √Δ) / 2a = (' + fmt(-qb) + ' ± ' + (exact ? fmt(Math.round(sq)) : '√' + fmt(D)) + ') / ' + fmt(2 * qa));
+      if (!exact) L.push('√' + fmt(D) + ' ≈ ' + fmt(sq));
+      var x1 = (-qb + sq) / (2 * qa), x2 = (-qb - sq) / (2 * qa);
+      L.push(vn + '₁ = (' + fmt(-qb) + ' + ' + fmt(exact ? Math.round(sq) : sq) + ') / ' + fmt(2 * qa) + ' = ' + nice(x1));
+      L.push(vn + '₂ = (' + fmt(-qb) + ' ' + MINUS + ' ' + fmt(exact ? Math.round(sq) : sq) + ') / ' + fmt(2 * qa) + ' = ' + nice(x2));
+      roots.push({ re: x1, im: 0 }); roots.push({ re: x2, im: 0 });
+    } else {
+      var re = -qb / (2 * qa), im = Math.sqrt(-D) / (2 * Math.abs(qa));
+      L.push('Δ < 0 → não há raízes reais (raízes complexas)');
+      L.push(vn + ' = (' + fmt(-qb) + ' ± √(' + fmt(D) + ')) / ' + fmt(2 * qa) + ' = ' + fmt(re) + ' ± ' + fmt(im) + 'i');
+      roots.push({ re: re, im: im }); roots.push({ re: re, im: -im });
+    }
+    return roots;
+  }
+  /* grau ≥ 3: raízes racionais (Briot-Ruffini) */
+  L.push('Equação do ' + deg + 'º grau: ' + polyStr(c, vn) + ' = 0');
+  var ic = intScale(c), guard = 0;
+  while (c.length - 1 >= 3 && ic && guard++ < 6) {
+    var an = ic[ic.length - 1], a0 = ic[0], found = null, ps = divisors(a0), qs = divisors(an);
+    if (ps.length * qs.length > 6000) break;
+    outer: for (var i = 0; i < ps.length; i++) for (var j = 0; j < qs.length; j++) for (var sgn = -1; sgn <= 1; sgn += 2) {
+      var cand = sgn * ps[i] / qs[j]; if (Math.abs(pEval(c, cand)) < 1e-7 * Math.max(1, Math.abs(c[c.length - 1]))) { found = cand; break outer; }
+    }
+    if (found === null) break;
+    if (guard === 1) L.push('Testando raízes racionais ±(divisores de ' + fmt(a0) + ') / (divisores de ' + fmt(an) + ')');
+    L.push(vn + ' = ' + fracStr(found) + ' é raiz. Dividindo por (' + vn + (found < 0 ? ' + ' + fmt(-found) : ' ' + MINUS + ' ' + fmt(found)) + ') com Briot-Ruffini:');
+    var co = c.slice().reverse(), q = [co[0]], row1 = co.map(fmt).join('   ');
+    for (var k = 1; k < co.length; k++) q.push(co[k] + q[k - 1] * found);
+    L.push('   ' + fmt(found) + ' | ' + row1);
+    L.push('        ' + q.map(fmt).join('   ') + '   (último = resto = ' + fmt(clean(q[q.length - 1])) + ')');
+    roots.push({ re: found, im: 0 });
+    c = pTrim(q.slice(0, -1).reverse()); ic = intScale(c);
+    L.push('Quociente: ' + polyStr(c, vn) + ' = 0');
+  }
+  if (c.length - 1 >= 1 && c.length - 1 <= 2) { solvePoly(c, vn, L).forEach(function (r) { roots.push(r); }); }
+  else if (c.length - 1 >= 3) {
+    L.push('Sem mais raízes racionais: uso método numérico (Durand-Kerner).');
+    durandKerner(c).forEach(function (r) { roots.push({ re: clean(r[0]), im: Math.abs(r[1]) < 1e-7 ? 0 : clean(r[1]) }); });
+  }
+  return roots;
+}
+function summary(roots, vn) {
+  var real = [], cx = [];
+  roots.forEach(function (r) { if (Math.abs(r.im) < 1e-9) { if (!r.dup) real.push(r.re); } else if (r.im > 0) cx.push(r); });
+  real.sort(function (a, b) { return a - b; });
+  var parts = real.map(function (r) { return fracStr(r); }).concat(cx.map(function (r) { return complexStr(r.re, r.im) + ' e ' + complexStr(r.re, -r.im); }));
+  return parts.length ? 'S = { ' + parts.join(' ; ') + ' }' : 'S = ∅ (sem solução real)';
+}
+
+/* equação numérica geral (funções de x): varre e refina */
+function solveNumeric(fn, L) {
+  var xs = [], prev = null, roots = [], lo = -50, hi = 50, N = 4000, i;
+  for (i = 0; i <= N; i++) {
+    var x = lo + (hi - lo) * i / N, y = fn(x);
+    if (prev && isFinite(y) && isFinite(prev.y) && prev.y * y <= 0 && Math.abs(y - prev.y) < 1e3) {
+      var a = prev.x, b = x, fa = prev.y;
+      for (var k = 0; k < 80; k++) { var m = (a + b) / 2, fm = fn(m); if (fa * fm <= 0) b = m; else { a = m; fa = fm; } }
+      var r = (a + b) / 2; if (!roots.length || Math.abs(roots[roots.length - 1] - r) > 1e-6) roots.push(r);
+    }
+    prev = { x: x, y: y };
+  }
+  L.push('Equação não polinomial: procurei soluções entre ' + MINUS + '50 e 50 pelo método da bisseção.');
+  roots.slice(0, 12).forEach(function (r, k) { L.push('x' + (k + 1 < 10 ? String.fromCharCode(8320 + k + 1) : (k + 1)) + ' ≈ ' + fmt(r)); });
+  return roots;
+}
+
+/* ================= entrada principal ================= */
+function literalChain(ast, op) {
+  /* a + b + c  (sem parênteses, só números não negativos) */
+  var out = [];
+  function walk(a) { if (a.t === 'bin' && a.op === op && !a.imp) { walk(a.a); walk(a.b); } else if (a.t === 'num' && !a.c && a.raw) out.push(a.raw.replace(/^\./, '0.')); else out.length = 999; }
+  walk(ast); return out.length < 99 ? out : null;
+}
+function solve(input) {
+  var src = String(input || '').trim();
+  if (!src) return { error: 'Digite ou escreva uma conta ou equação.' };
+  var L = [];
+  try {
+    var parts = src.split(/[;\n]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+    if (parts.length === 2 && parts.every(function (s) { return s.indexOf('=') > 0; })) return solveSystem(parts);
+    var s0 = src.replace(/=\s*\??\s*$/, '');
+    var eq = s0.split('=');
+    if (eq.length > 2) return { error: 'Use um único sinal de igual.' };
+    if (eq.length === 2 && eq[1].trim()) return solveEquation(eq[0], eq[1]);
+    var ast = parse(s0), vs = Object.keys(vars(ast));
+    if (vs.length === 0) return solveArith(ast, s0);
+    if (vs.length > 1) return { error: 'Há mais de uma letra (' + vs.join(', ') + '). Para sistemas, escreva duas equações separadas por ponto e vírgula.' };
+    var vn = vs[0], poly = toPoly(ast, vn);
+    L.push(show(ast));
+    if (poly) {
+      L.push('Forma expandida: ' + polyStr(poly, vn));
+      if (poly.length > 1) { L.push(''); L.push('Raízes (' + polyStr(poly, vn) + ' = 0):'); var rts = solvePoly(poly, vn, L); L.push(''); L.push(summary(rts, vn)); }
+      return { lines: L, answer: 'Forma expandida: ' + polyStr(poly, vn), kind: 'poly', fn: s0 };
+    }
+    L.push('Expressão com ' + vn + ': use o botão Gráfico para ver a curva.');
+    return { lines: L, answer: '', kind: 'fn', fn: s0 };
+  } catch (e) { return { error: e.message || 'Não consegui entender a expressão.' }; }
+}
+function solveArith(ast, s0) {
+  var L = [], raw;
+  var plus = literalChain(ast, '+');
+  if (plus && plus.length >= 2) { var r = vAdd(plus); return pack('Conta armada: soma', r, L, s0); }
+  if (ast.t === 'bin' && !ast.imp) {
+    var A = ast.a, B = ast.b;
+    if (A.t === 'num' && B.t === 'num' && A.raw && B.raw) {
+      var ra = A.raw.replace(/^\./, '0.'), rb = B.raw.replace(/^\./, '0.');
+      if (ast.op === '-') return pack('Conta armada: subtração', vSub(ra, rb), L, s0);
+      if (ast.op === '*') return pack('Conta armada: multiplicação', vMul(ra, rb), L, s0);
+      if (ast.op === '/') { var d = vDiv(ra, rb); if (d.error) return { error: d.error }; return pack('Conta armada: divisão', d, L, s0); }
+    }
+  }
+  var st = stepsOf(ast); st.lines.forEach(function (l) { L.push(l); });
+  var v = st.value;
+  if (!isFinite(v)) return { error: 'Resultado indefinido (divisão por zero ou fora do domínio).' };
+  var ans = nice(v); if (toFrac(v, 1000) == null) ans = '≈ ' + fmt(v);
+  L.push(''); L.push('Resultado: ' + ans);
+  return { lines: L, answer: ans, kind: 'arith' };
+}
+function pack(title, r, L, s0) {
+  var out = [title, ''];
+  r.lines.forEach(function (l) { out.push(l); });
+  if (r.notes && r.notes.length) { out.push(''); out.push('Passo a passo:'); r.notes.forEach(function (n) { out.push(' · ' + n); }); }
+  out.push(''); out.push('Resultado: ' + r.text);
+  return { lines: out, answer: r.text, kind: 'arith', mono: true };
+}
+function solveEquation(ls, rs) {
+  var left = parse(ls), right = parse(rs), vs = vars(left); Object.keys(vars(right)).forEach(function (k) { vs[k] = 1; });
+  var names = Object.keys(vs), L = [];
+  if (names.length === 0) {
+    var a = ev(left), b = ev(right);
+    L.push(show(left) + ' = ' + show(right));
+    L.push(Math.abs(a - b) < 1e-9 ? 'Verdadeiro: ambos valem ' + nice(a) : 'Falso: ' + nice(a) + ' ≠ ' + nice(b));
+    return { lines: L, answer: Math.abs(a - b) < 1e-9 ? 'Verdadeiro' : 'Falso', kind: 'arith' };
+  }
+  if (names.length > 1) return { error: 'Há mais de uma letra. Escreva duas equações separadas por ponto e vírgula para um sistema.' };
+  var vn = names[0], pl = toPoly(left, vn), pr = toPoly(right, vn);
+  L.push('Equação: ' + show(left) + ' = ' + show(right));
+  if (!pl || !pr) {
+    var rts = solveNumeric(function (x) { var e = {}; e[vn] = x; return ev(left, e) - ev(right, e); }, L);
+    L.push(''); L.push(rts.length ? 'S ≈ { ' + rts.slice(0, 12).map(fmt).join(' ; ') + ' }' : 'Nenhuma solução encontrada em [' + MINUS + '50, 50].');
+    return { lines: L, answer: '', kind: 'eq', fn: ls + '-(' + rs + ')' };
+  }
+  var p = pSub(pl, pr);
+  if (pr.length > 1 || pr[0] !== 0) { L.push('Passando tudo para um lado:'); L.push(polyStr(p, vn) + ' = 0'); }
+  L.push('');
+  var roots = solvePoly(p, vn, L);
+  L.push(''); L.push(summary(roots, vn));
+  if (roots.length && roots.every(function (r) { return Math.abs(r.im) < 1e-9; })) {
+    L.push(''); L.push('Verificação:');
+    var seen = [];
+    roots.forEach(function (r) { var k = fmt(r.re); if (seen.indexOf(k) >= 0) return; seen.push(k); var e = {}; e[vn] = r.re; L.push('  ' + vn + ' = ' + fmt(r.re) + ' → ' + fmt(ev(left, e)) + ' = ' + fmt(ev(right, e)) + (Math.abs(ev(left, e) - ev(right, e)) < 1e-6 * Math.max(1, Math.abs(ev(left, e))) ? '  ✓' : '')); });
+  }
+  return { lines: L, answer: summary(roots, vn), kind: 'eq', fn: polyStr(p, vn).replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, function (m) { var map = '⁰¹²³⁴⁵⁶⁷⁸⁹', o = ''; for (var i = 0; i < m.length; i++) o += map.indexOf(m[i]); return '^' + o; }).replace(/,/g, '.').replace(/−/g, '-') };
+}
+function linXY(e) {
+  var s = e.split('='), l = parse(s[0]), r = parse(s[1]);
+  function coef(a) {
+    var c = { x: 0, y: 0, k: 0 };
+    (function walk(n, m) {
+      if (n.t === 'num') c.k += m * n.v; else if (n.t === 'var') c[n.n] = (c[n.n] || 0) + m; else if (n.t === 'par') walk(n.a, m); else if (n.t === 'neg') walk(n.a, -m);
+      else if (n.t === 'bin' && (n.op === '+' || n.op === '-')) { walk(n.a, m); walk(n.b, n.op === '+' ? m : -m); }
+      else if (n.t === 'bin' && n.op === '*') { var va = Object.keys(vars(n.a)).length, vb = Object.keys(vars(n.b)).length; if (va === 0 && vb > 0) walk(n.b, m * ev(n.a)); else if (vb === 0 && va > 0) walk(n.a, m * ev(n.b)); else if (va === 0 && vb === 0) c.k += m * ev(n); else throw new Error('A equação não é linear.'); }
+      else if (n.t === 'bin' && n.op === '/') { if (Object.keys(vars(n.b)).length) throw new Error('A equação não é linear.'); walk(n.a, m / ev(n.b)); }
+      else throw new Error('A equação não é linear.');
+    })(a, 1);
+    return c;
+  }
+  var cl = coef(l), cr = coef(r); return { a: cl.x - cr.x, b: cl.y - cr.y, c: cr.k - cl.k };
+}
+function solveSystem(parts) {
+  var L = ['Sistema:'], E = parts.map(linXY);
+  parts.forEach(function (p, i) { L.push('  (' + (i + 1) + ') ' + p.replace(/\*/g, '×').replace(/-/g, MINUS)); });
+  var a1 = E[0].a, b1 = E[0].b, c1 = E[0].c, a2 = E[1].a, b2 = E[1].b, c2 = E[1].c;
+  L.push(''); L.push('Forma padrão ax + by = c:');
+  function lin(a, b) { var t = term(a, 1, 'x', true), u = term(b, 1, 'y', !t); return (t + u) || '0'; }
+  L.push('  (1) ' + lin(a1, b1) + ' = ' + fmt(c1)); L.push('  (2) ' + lin(a2, b2) + ' = ' + fmt(c2));
+  function pr(v) { return v < 0 ? '(' + fmt(v) + ')' : fmt(v); }
+  var D = a1 * b2 - a2 * b1;
+  L.push(''); L.push('Regra de Cramer:');
+  L.push('D = a₁·b₂ ' + MINUS + ' a₂·b₁ = ' + pr(a1) + '·' + pr(b2) + ' ' + MINUS + ' ' + pr(a2) + '·' + pr(b1) + ' = ' + fmt(D));
+  if (Math.abs(D) < 1e-12) {
+    var Dx0 = c1 * b2 - c2 * b1; L.push(Math.abs(Dx0) < 1e-12 ? 'D = 0 e Dx = 0 → infinitas soluções (equações equivalentes).' : 'D = 0 e Dx ≠ 0 → sistema impossível (sem solução).');
+    return { lines: L, answer: Math.abs(Dx0) < 1e-12 ? 'Infinitas soluções' : 'Sem solução', kind: 'sys' };
+  }
+  var Dx = c1 * b2 - c2 * b1, Dy = a1 * c2 - a2 * c1, x = Dx / D, y = Dy / D;
+  L.push('Dx = c₁·b₂ ' + MINUS + ' c₂·b₁ = ' + fmt(Dx)); L.push('Dy = a₁·c₂ ' + MINUS + ' a₂·c₁ = ' + fmt(Dy));
+  L.push('x = Dx / D = ' + nice(x)); L.push('y = Dy / D = ' + nice(y));
+  L.push(''); L.push('Verificação: (1) ' + fmt(a1 * x + b1 * y) + ' = ' + fmt(c1) + '  ✓   (2) ' + fmt(a2 * x + b2 * y) + ' = ' + fmt(c2) + '  ✓');
+  L.push(''); L.push('S = { (' + fracStr(x) + ' ; ' + fracStr(y) + ') }');
+  return { lines: L, answer: 'x = ' + fracStr(x) + ', y = ' + fracStr(y), kind: 'sys' };
+}
+
+CP.math = { solve: solve, parse: parse, ev: ev, compile: compile, fmt: fmt, show: show, vAdd: vAdd, vSub: vSub, vMul: vMul, vDiv: vDiv, toPoly: toPoly, normalize: normalize };
+})();
+(function () {
+'use strict';
+var CP = window.CP, $ = CP.$, S = CP.S, E = CP.engine;
+var M = CP.math, PI = Math.PI;
+function note() { return CP.cur(); }
+function sc() { return E.scale(); }
+function esc(s) { return CP.esc(s); }
+
+/* ---------- inserir traços/textos na nota e já selecionar ---------- */
+function viewCenter() {
+  var scr = $('#scroller'), k = sc() || 1, cx = 500, top = (scr.scrollTop + scr.clientHeight * 0.38) / k;
+  return { x: cx, y: Math.max(120, top) };
+}
+function densify(pts, step) {
+  var o = [pts[0]], i;
+  for (i = 1; i < pts.length; i++) {
+    var a = pts[i - 1], b = pts[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]), k = Math.ceil(L / step);
+    for (var j = 1; j <= k; j++) o.push([a[0] + (b[0] - a[0]) * j / k, a[1] + (b[1] - a[1]) * j / k]);
+  }
+  return o;
+}
+function mkStroke(pts, o) {
+  pts = densify(pts, 5);
+  var d = [], i; for (i = 0; i < pts.length; i++) d.push(Math.round(pts[i][0] * 10) / 10, Math.round(pts[i][1] * 10) / 10, 60);
+  var s = { k: 'p', c: o.c, w: o.w, d: d };
+  if (CP.hooks.newStroke) CP.hooks.newStroke(s);
+  return s;
+}
+function insertItems(items, texts) {
+  var n = note(); if (!n) return;
+  var subs = [], sel = [], g = CP.uid();
+  items.forEach(function (it) { var s = mkStroke(it.p, { c: it.c || S.pen.c, w: it.w || S.pen.w }); s.g = g; n.strokes.push(s); subs.push({ t: 'add', s: s }); sel.push(s); });
+  (texts || []).forEach(function (tx) { tx.g = g; n.texts.push(tx); subs.push({ t: 'tadd', tx: tx }); });
+  E.push({ t: 'multi', list: subs });
+  if (E.placeTexts) E.placeTexts();
+  E.redraw();
+  S.tool = 'lasso'; if (CP.hooks.toolChanged) CP.hooks.toolChanged(); CP.persistMeta();
+  CP.lasso.select(sel);
+  CP.queueSave(n);
+}
+function moveTo(items, texts, c) {
+  var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  items.forEach(function (it) { it.p.forEach(function (q) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); }); });
+  (texts || []).forEach(function (t) { x0 = Math.min(x0, t.x); y0 = Math.min(y0, t.y); x1 = Math.max(x1, t.x + t.w); y1 = Math.max(y1, t.y + t.size * 1.5); });
+  var dx = c.x - (x0 + x1) / 2, dy = c.y - (y0 + y1) / 2;
+  items.forEach(function (it) { it.p = it.p.map(function (q) { return [q[0] + dx, q[1] + dy]; }); });
+  (texts || []).forEach(function (t) { t.x = Math.round(t.x + dx); t.y = Math.round(t.y + dy); });
+}
+function mkText(text, x, y, size, c, extra) {
+  var tx = { id: CP.uid(), x: Math.round(x), y: Math.round(y), w: Math.round(extra && extra.w || 420), size: size, c: c || S.pen.c, text: text };
+  if (extra && extra.mono) tx.mono = true; return tx;
+}
+
+/* ---------- geometria ---------- */
+function arc(cx, cy, rx, ry, a0, a1, n) { var o = [], i; n = n || 40; for (i = 0; i <= n; i++) { var t = a0 + (a1 - a0) * i / n; o.push([cx + rx * Math.cos(t), cy + ry * Math.sin(t)]); } return o; }
+function ell(cx, cy, rx, ry) { return arc(cx, cy, rx, ry, 0, 2 * PI, 56); }
+function closed(p) { return p.concat([p[0]]); }
+function reg(n, w, h, rot) { var o = [], i; for (i = 0; i < n; i++) { var t = (rot == null ? -PI / 2 : rot) + 2 * PI * i / n; o.push([w / 2 + w / 2 * Math.cos(t), h / 2 + h / 2 * Math.sin(t)]); } return fitBox(o, w, h); }
+function fitBox(p, w, h) { var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; p.forEach(function (q) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); }); return p.map(function (q) { return [(q[0] - x0) / (x1 - x0 || 1) * w, (q[1] - y0) / (y1 - y0 || 1) * h]; }); }
+function dashed(p, len, gap) {
+  var out = [], i, acc = 0, cur = [p[0]], on = true, need = len;
+  for (i = 1; i < p.length; i++) {
+    var a = p[i - 1], b = p[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]), pos = 0;
+    while (L - pos > need) { pos += need; var t = pos / L, q = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; if (on) { cur.push(q); out.push(cur); cur = []; } else cur = [q]; on = !on; need = on ? len : gap; }
+    need -= L - pos; if (on) cur.push(b);
+  }
+  if (on && cur.length > 1) out.push(cur);
+  return out;
+}
+function seg(a, b) { return [a, b]; }
+function headAt(tip, from, size, ang) {
+  var dx = tip[0] - from[0], dy = tip[1] - from[1], l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l; ang = ang || 0.5;
+  function rot(a) { return [tip[0] - size * (dx * Math.cos(a) - dy * Math.sin(a)), tip[1] - size * (dy * Math.cos(a) + dx * Math.sin(a))]; }
+  return [rot(ang), tip, rot(-ang)];
+}
+function P(list) { return list.map(function (p) { return { p: p }; }); }
+function D(list) { var o = []; list.forEach(function (p) { dashed(p, 7, 6).forEach(function (q) { o.push({ p: q }); }); }); return o; }
+function hs(w, h) { return Math.min(Math.max(14, Math.min(w, h) * 0.35), 34, w * 0.4); }
+
+/* ---------- biblioteca ---------- */
+var CATS = ['Básicas', 'Setas', 'Sólidos', 'Fluxograma', 'Eletrônica', 'Matemática'];
+var SH = [];
+function def(cat, name, w, h, fn) { SH.push({ cat: cat, name: name, w: w, h: h, make: fn }); }
+/* básicas */
+def('Básicas', 'Linha', 240, 0.01, function (w, h) { return P([[[0, 0], [w, 0]]]); });
+def('Básicas', 'Retângulo', 280, 170, function (w, h) { return P([closed([[0, 0], [w, 0], [w, h], [0, h]])]); });
+def('Básicas', 'Quadrado', 200, 200, function (w, h) { return P([closed([[0, 0], [w, 0], [w, h], [0, h]])]); });
+def('Básicas', 'Retângulo arredondado', 280, 170, function (w, h) { var r = Math.min(w, h) * 0.2; return P([closed([].concat(arc(w - r, r, r, r, -PI / 2, 0, 8), arc(w - r, h - r, r, r, 0, PI / 2, 8), arc(r, h - r, r, r, PI / 2, PI, 8), arc(r, r, r, r, PI, 1.5 * PI, 8)))]); });
+def('Básicas', 'Círculo', 200, 200, function (w, h) { return P([ell(w / 2, h / 2, w / 2, h / 2)]); });
+def('Básicas', 'Elipse', 280, 170, function (w, h) { return P([ell(w / 2, h / 2, w / 2, h / 2)]); });
+def('Básicas', 'Triângulo', 220, 190, function (w, h) { return P([closed([[w / 2, 0], [w, h], [0, h]])]); });
+def('Básicas', 'Triângulo retângulo', 220, 190, function (w, h) { return P([closed([[0, 0], [0, h], [w, h]])]); });
+def('Básicas', 'Losango', 220, 220, function (w, h) { return P([closed([[w / 2, 0], [w, h / 2], [w / 2, h], [0, h / 2]])]); });
+def('Básicas', 'Trapézio', 260, 160, function (w, h) { return P([closed([[w * .2, 0], [w * .8, 0], [w, h], [0, h]])]); });
+def('Básicas', 'Paralelogramo', 260, 160, function (w, h) { return P([closed([[w * .25, 0], [w, 0], [w * .75, h], [0, h]])]); });
+def('Básicas', 'Pentágono', 210, 200, function (w, h) { return P([closed(reg(5, w, h))]); });
+def('Básicas', 'Hexágono', 220, 190, function (w, h) { return P([closed(reg(6, w, h, 0))]); });
+def('Básicas', 'Octógono', 210, 210, function (w, h) { return P([closed(reg(8, w, h, PI / 8))]); });
+def('Básicas', 'Estrela', 220, 210, function (w, h) { var o = [], i; for (i = 0; i < 10; i++) { var t = -PI / 2 + i * PI / 5, r = i % 2 ? 0.42 : 1; o.push([0.5 + 0.5 * r * Math.cos(t), 0.5 + 0.5 * r * Math.sin(t)]); } return P([closed(fitBox(o, w, h))]); });
+def('Básicas', 'Coração', 220, 200, function (w, h) { var o = [], i; for (i = 0; i <= 60; i++) { var t = i / 60 * 2 * PI; o.push([16 * Math.pow(Math.sin(t), 3), -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t))]); } return P([fitBox(o, w, h)]); });
+def('Básicas', 'Cruz', 200, 200, function (w, h) { var a = 0.34, b = 0.66; return P([closed([[a * w, 0], [b * w, 0], [b * w, a * h], [w, a * h], [w, b * h], [b * w, b * h], [b * w, h], [a * w, h], [a * w, b * h], [0, b * h], [0, a * h], [a * w, a * h]])]); });
+def('Básicas', 'Semicírculo', 240, 130, function (w, h) { return P([closed(arc(w / 2, h, w / 2, h, PI, 2 * PI, 40))]); });
+def('Básicas', 'Arco', 240, 120, function (w, h) { return P([arc(w / 2, h, w / 2, h, PI, 2 * PI, 40)]); });
+def('Básicas', 'Raio', 150, 220, function (w, h) { return P([closed([[w * .6, 0], [0, h * .58], [w * .46, h * .58], [w * .32, h], [w, h * .38], [w * .54, h * .38]])]); });
+def('Básicas', 'Visto', 200, 150, function (w, h) { return P([[[0, h * .55], [w * .35, h], [w, 0]]]); });
+def('Básicas', 'X', 170, 170, function (w, h) { return P([[[0, 0], [w, h]], [[w, 0], [0, h]]]); });
+/* setas */
+def('Setas', 'Seta', 260, 60, function (w, h) { var s = hs(w, h); return P([[[0, h / 2], [w, h / 2]], headAt([w, h / 2], [0, h / 2], s)]); });
+def('Setas', 'Seta dupla', 260, 60, function (w, h) { var s = hs(w, h); return P([[[0, h / 2], [w, h / 2]], headAt([w, h / 2], [0, h / 2], s), headAt([0, h / 2], [w, h / 2], s)]); });
+def('Setas', 'Seta tracejada', 260, 60, function (w, h) { var s = hs(w, h); return P(dashed([[0, h / 2], [w, h / 2]], 14, 9)).concat(P([headAt([w, h / 2], [0, h / 2], s)])); });
+def('Setas', 'Seta vertical', 60, 220, function (w, h) { var s = hs(w, h); return P([[[w / 2, h], [w / 2, 0]], headAt([w / 2, 0], [w / 2, h], s)]); });
+def('Setas', 'Seta diagonal', 220, 180, function (w, h) { var s = hs(w, h); return P([[[0, h], [w, 0]], headAt([w, 0], [0, h], s)]); });
+def('Setas', 'Seta curva', 240, 140, function (w, h) { var a = arc(w / 2, h, w / 2, h * 0.9, PI, 2 * PI * 0.97, 36), e = a[a.length - 1], f = a[a.length - 4], s = Math.min(30, w * .15); return P([a, headAt(e, f, s)]); });
+def('Setas', 'Seta em U', 160, 160, function (w, h) { var a = [[0, h]].concat([[0, h * .3]], arc(w / 2, h * .3, w / 2, h * .3, PI, 2 * PI, 20), [[w, h * .75]]), s = Math.min(28, w * .3); return P([a, headAt([w, h * .75], [w, h * .3], s)]); });
+def('Setas', 'Seta de bloco', 260, 120, function (w, h) { var a = Math.min(w * .35, h * .9); return P([closed([[0, h * .3], [w - a, h * .3], [w - a, 0], [w, h / 2], [w - a, h], [w - a, h * .7], [0, h * .7]])]); });
+def('Setas', 'Chevron', 140, 190, function (w, h) { return P([[[0, 0], [w, h / 2], [0, h]]]); });
+def('Setas', 'Chave { }', 80, 240, function (w, h) { var o = [].concat(arc(w, h * .1, w, h * .1, -PI / 2, -PI, 8).reverse().reverse(), []); var p = [[w, 0]].concat(arc(w, h * .12, w / 2 + 0.01, h * .12, -PI / 2, -PI, 8).map(function (q) { return [q[0], q[1]]; }), [[w / 2, h * .38]], arc(0, h * .38, w / 2, h * .12, 0, PI / 2, 8), arc(0, h * .62, w / 2, h * .12, -PI / 2, 0, 8), [[w / 2, h * .62]], arc(w, h * .88, w / 2, h * .12, PI, PI / 2, 8), [[w, h]]); return P([p]); });
+def('Setas', 'Colchete [ ]', 70, 220, function (w, h) { return P([[[w, 0], [0, 0], [0, h], [w, h]]]); });
+/* sólidos (desenho 2D) */
+def('Sólidos', 'Cubo', 220, 220, function (w, h) {
+  var d = Math.min(w, h) * 0.3, f = [[0, d], [w - d, d], [w - d, h], [0, h]], b = [[d, 0], [w, 0], [w, h - d], [d, h - d]];
+  return P([closed(f), [f[1], b[1]], [f[0], b[0]], [b[0], b[1]], [b[1], b[2]], [f[2], b[2]]]).concat(D([[b[2], b[3]], [b[3], b[0]], [f[3], b[3]]]));
+});
+def('Sólidos', 'Paralelepípedo', 300, 200, function (w, h) {
+  var d = Math.min(w, h) * 0.3, f = [[0, d], [w - d, d], [w - d, h], [0, h]], b = [[d, 0], [w, 0], [w, h - d], [d, h - d]];
+  return P([closed(f), [f[1], b[1]], [f[0], b[0]], [b[0], b[1]], [b[1], b[2]], [f[2], b[2]]]).concat(D([[b[2], b[3]], [b[3], b[0]], [f[3], b[3]]]));
+});
+def('Sólidos', 'Cilindro', 170, 230, function (w, h) { var ry = Math.min(h * .12, w * .22); return P([ell(w / 2, ry, w / 2, ry), [[0, ry], [0, h - ry]], [[w, ry], [w, h - ry]], arc(w / 2, h - ry, w / 2, ry, 0, PI, 24)]).concat(D([arc(w / 2, h - ry, w / 2, ry, PI, 2 * PI, 24)])); });
+def('Sólidos', 'Cone', 170, 230, function (w, h) { var ry = Math.min(h * .12, w * .22); return P([[[w / 2, 0], [0, h - ry]], [[w / 2, 0], [w, h - ry]], arc(w / 2, h - ry, w / 2, ry, 0, PI, 24)]).concat(D([arc(w / 2, h - ry, w / 2, ry, PI, 2 * PI, 24)])); });
+def('Sólidos', 'Esfera', 210, 210, function (w, h) { var ry = h * .13; return P([ell(w / 2, h / 2, w / 2, h / 2), arc(w / 2, h / 2, w / 2, ry, 0, PI, 28)]).concat(D([arc(w / 2, h / 2, w / 2, ry, PI, 2 * PI, 28)])); });
+def('Sólidos', 'Hemisfério', 220, 150, function (w, h) { var ry = h * .16; return P([arc(w / 2, h - ry, w / 2, h - ry, PI, 2 * PI, 36), ell(w / 2, h - ry, w / 2, ry)]); });
+def('Sólidos', 'Pirâmide', 230, 200, function (w, h) { var a = [w / 2, 0], p1 = [0, h * .78], p2 = [w * .5, h], p3 = [w, h * .72], p4 = [w * .45, h * .55]; return P([[a, p1], [a, p2], [a, p3], closed([p1, p2, p3]).slice(0, 3)]).concat(D([[p3, p4], [p4, p1], [a, p4]])); });
+def('Sólidos', 'Prisma triangular', 240, 170, function (w, h) { var d = w * .28, f = [[0, h], [(w - d) / 2, h * .25 + 8], [w - d, h]], b = f.map(function (q) { return [q[0] + d, q[1] - h * .25]; }); return P([closed(f), [f[1], b[1]], [f[2], b[2]], [b[1], b[2]], [b[0], b[1]]]).concat(D([[f[0], b[0]], [b[0], b[2]]])); });
+/* fluxograma */
+def('Fluxograma', 'Início / Fim', 240, 90, function (w, h) { var r = h / 2; return P([closed([].concat(arc(w - r, r, r, r, -PI / 2, PI / 2, 14), arc(r, r, r, r, PI / 2, 1.5 * PI, 14)))]); });
+def('Fluxograma', 'Processo', 240, 110, function (w, h) { return P([closed([[0, 0], [w, 0], [w, h], [0, h]])]); });
+def('Fluxograma', 'Decisão', 240, 150, function (w, h) { return P([closed([[w / 2, 0], [w, h / 2], [w / 2, h], [0, h / 2]])]); });
+def('Fluxograma', 'Entrada / Saída', 250, 100, function (w, h) { return P([closed([[w * .18, 0], [w, 0], [w * .82, h], [0, h]])]); });
+def('Fluxograma', 'Conector', 90, 90, function (w, h) { return P([ell(w / 2, h / 2, w / 2, h / 2)]); });
+def('Fluxograma', 'Documento', 240, 130, function (w, h) { var wv = []; for (var i = 0; i <= 24; i++) wv.push([w - w * i / 24, h * .86 + Math.sin(i / 24 * 2 * PI) * h * .09]); return P([closed([[0, 0], [w, 0], [w, h * .86]].concat(wv).concat([[0, h * .86]]))]); });
+def('Fluxograma', 'Banco de dados', 170, 200, function (w, h) { var ry = h * .1; return P([ell(w / 2, ry, w / 2, ry), [[0, ry], [0, h - ry]], [[w, ry], [w, h - ry]], arc(w / 2, h - ry, w / 2, ry, 0, PI, 24), arc(w / 2, ry * 2.4, w / 2, ry, 0, PI, 24)]); });
+/* eletrônica */
+def('Eletrônica', 'Resistor', 260, 70, function (w, h) { var a = w * .2, z = [[0, h / 2], [a, h / 2]], n = 6, i, step = (w - 2 * a) / n; for (i = 0; i < n; i++) { z.push([a + step * (i + .5), i % 2 ? h : 0]); } z.push([w - a, h / 2], [w, h / 2]); return P([z]); });
+def('Eletrônica', 'Capacitor', 200, 120, function (w, h) { return P([[[0, h / 2], [w * .42, h / 2]], [[w * .42, 0], [w * .42, h]], [[w * .58, 0], [w * .58, h]], [[w * .58, h / 2], [w, h / 2]]]); });
+def('Eletrônica', 'Indutor', 280, 80, function (w, h) { var a = w * .14, n = 4, r = (w - 2 * a) / n / 2, o = [[0, h * .8], [a, h * .8]], i; for (i = 0; i < n; i++) o = o.concat(arc(a + r + i * 2 * r, h * .8, r, h * .75, PI, 2 * PI, 12)); o.push([w - a, h * .8], [w, h * .8]); return P([o]); });
+def('Eletrônica', 'Bateria', 200, 120, function (w, h) { return P([[[0, h / 2], [w * .36, h / 2]], [[w * .36, h * .05], [w * .36, h * .95]], [[w * .5, h * .27], [w * .5, h * .73]], [[w * .64, h * .05], [w * .64, h * .95]], [[w * .64, h / 2], [w, h / 2]]]); });
+def('Eletrônica', 'Terra', 120, 130, function (w, h) { return P([[[w / 2, 0], [w / 2, h * .4]], [[0, h * .4], [w, h * .4]], [[w * .18, h * .65], [w * .82, h * .65]], [[w * .36, h * .9], [w * .64, h * .9]]]); });
+def('Eletrônica', 'Lâmpada', 240, 100, function (w, h) { var r = h / 2, c = w / 2; return P([[[0, h / 2], [c - r, h / 2]], ell(c, h / 2, r, r), [[c - r * .7, h / 2 - r * .7], [c + r * .7, h / 2 + r * .7]], [[c - r * .7, h / 2 + r * .7], [c + r * .7, h / 2 - r * .7]], [[c + r, h / 2], [w, h / 2]]]); });
+def('Eletrônica', 'Chave', 240, 90, function (w, h) { return P([[[0, h * .8], [w * .25, h * .8]], [[w * .25, h * .8], [w * .72, h * .1]], [[w * .8, h * .8], [w, h * .8]], ell(w * .25, h * .8, 4, 4), ell(w * .8, h * .8, 4, 4)]); });
+def('Eletrônica', 'Diodo', 220, 100, function (w, h) { return P([[[0, h / 2], [w * .3, h / 2]], closed([[w * .3, 0], [w * .3, h], [w * .7, h / 2]]), [[w * .7, 0], [w * .7, h]], [[w * .7, h / 2], [w, h / 2]]]); });
+def('Eletrônica', 'Fonte CA', 210, 120, function (w, h) { var r = h / 2, c = w / 2, s = []; for (var i = 0; i <= 24; i++) s.push([c - r * .6 + r * 1.2 * i / 24, h / 2 - Math.sin(i / 24 * 2 * PI) * r * .35]); return P([[[0, h / 2], [c - r, h / 2]], ell(c, h / 2, r, r), s, [[c + r, h / 2], [w, h / 2]]]); });
+/* matemática */
+def('Matemática', 'Eixos X-Y', 300, 300, function (w, h) { var s = 18; return P([[[0, h / 2], [w, h / 2]], headAt([w, h / 2], [0, h / 2], s), [[w / 2, h], [w / 2, 0]], headAt([w / 2, 0], [w / 2, h], s)]).concat((function () { var t = [], i; for (i = 1; i < 5; i++) { var q = w / 2 + (w / 2 - 20) * i / 4, q2 = w / 2 - (w / 2 - 20) * i / 4, v = h / 2 - (h / 2 - 20) * i / 4, v2 = h / 2 + (h / 2 - 20) * i / 4; t.push({ p: [[q, h / 2 - 5], [q, h / 2 + 5]] }, { p: [[q2, h / 2 - 5], [q2, h / 2 + 5]] }, { p: [[w / 2 - 5, v], [w / 2 + 5, v]] }, { p: [[w / 2 - 5, v2], [w / 2 + 5, v2]] }); } return t; })()); });
+def('Matemática', 'Plano com grade', 320, 320, function (w, h) { var o = [], i, n = 8; for (i = 0; i <= n; i++) { o.push({ p: [[w * i / n, 0], [w * i / n, h]], c: '#b6bfcc', w: 1.2 }, { p: [[0, h * i / n], [w, h * i / n]], c: '#b6bfcc', w: 1.2 }); } o.push({ p: [[0, h / 2], [w, h / 2]] }, { p: [[w / 2, h], [w / 2, 0]] }); return o; });
+def('Matemática', 'Reta numérica', 320, 60, function (w, h) { var o = [{ p: [[0, h / 2], [w, h / 2]] }, { p: headAt([w, h / 2], [0, h / 2], 14) }, { p: headAt([0, h / 2], [w, h / 2], 14) }], i; for (i = 1; i < 10; i++) o.push({ p: [[w * i / 10, h / 2 - 8], [w * i / 10, h / 2 + 8]] }); return o; });
+def('Matemática', 'Ângulo', 220, 150, function (w, h) { return P([[[w, h], [0, h]], [[0, h], [w * .85, h * .1]], arc(0, h, w * .32, w * .32, -0.62, 0, 14)]); });
+def('Matemática', 'Ângulo reto', 190, 190, function (w, h) { var m = Math.min(w, h) * .18; return P([[[0, 0], [0, h], [w, h]], [[0, h - m], [m, h - m], [m, h]]]); });
+def('Matemática', 'Eixos 3D', 280, 260, function (w, h) { var o = [w * .3, h * .7]; return P([[o, [w, h * .7]], headAt([w, h * .7], o, 16), [o, [o[0], 0]], headAt([o[0], 0], o, 16), [o, [0, h]], headAt([0, h], o, 16)]); });
+def('Matemática', 'Vetor', 220, 140, function (w, h) { return P([[[0, h], [w, 0]], headAt([w, 0], [0, h], 24, 0.4)]); });
+def('Matemática', 'Parábola', 240, 220, function (w, h) { var o = [], i; for (i = 0; i <= 40; i++) { var t = i / 40 * 2 - 1; o.push([w / 2 + t * w / 2, h * (1 - t * t)]); } return P([o]); });
+def('Matemática', 'Onda senoidal', 320, 130, function (w, h) { var o = [], i; for (i = 0; i <= 80; i++) o.push([w * i / 80, h / 2 - Math.sin(i / 80 * 4 * PI) * h / 2]); return P([o]); });
+
+function thumb(sh) {
+  var W = 100, H = 70, k = Math.min((W - 12) / sh.w, (H - 12) / Math.max(sh.h, 1)), w = sh.w * k, h = Math.max(sh.h, 8) * k, items = sh.make(sh.w, Math.max(sh.h, 8)), d = '';
+  items.forEach(function (it) { it.p.forEach(function (q, i) { d += (i ? 'L' : 'M') + (6 + (W - 12 - w) / 2 + q[0] * k).toFixed(1) + ' ' + (6 + (H - 12 - h) / 2 + q[1] * k).toFixed(1); }); });
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="56" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>';
+}
+function placeShape(sh, at) {
+  var items = sh.make(sh.w, Math.max(sh.h, 0.01)).map(function (it) { return { p: it.p.map(function (q) { return [q[0], q[1]]; }), c: it.c, w: it.w }; });
+  moveTo(items, [], at || viewCenter()); insertItems(items, []);
+}
+function wide(host) { var b = host.querySelector('.box'); if (b) { b.style.width = 'min(760px,100%)'; b.style.maxHeight = '84vh'; b.style.overflow = 'auto'; } }
+var catSel = 'Básicas';
+CP.shapesMenu = function () {
+  function html() {
+    return '<h3>Formas prontas</h3><div class="row" id="shCats" style="display:flex;flex-wrap:wrap;gap:6px">' + CATS.map(function (c) { return '<button type="button" class="chip' + (c === catSel ? ' on' : '') + '" data-c="' + c + '">' + c + '</button>'; }).join('') + '</div>' +
+      '<div id="shGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px">' + SH.filter(function (s) { return s.cat === catSel; }).map(function (s) { var i = SH.indexOf(s); return '<button type="button" class="shbtn" data-i="' + i + '" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;border-radius:12px;background:var(--panel-2);font-size:12px;font-weight:600;color:var(--ink)">' + thumb(s) + '<span>' + esc(s.name) + '</span></button>'; }).join('') + '</div>' +
+      '<p style="margin:2px 0 0;color:var(--muted);font-size:13px">A forma entra no meio da tela já selecionada: arraste para mover e use os puxadores ↔ ↕ para mudar largura e altura.</p><button type="button" class="opt" id="shX">Fechar</button>';
+  }
+  CP.ui.sheetMenu(html(), function (h, close) {
+    wide(h);
+    function wire() {
+      CP.$$('[data-c]', h).forEach(function (b) { b.addEventListener('click', function () { catSel = b.getAttribute('data-c'); h.querySelector('.box').innerHTML = html(); wire(); }); });
+      CP.$$('.shbtn', h).forEach(function (b) { b.addEventListener('click', function () { close(); placeShape(SH[+b.getAttribute('data-i')]); }); });
+      h.querySelector('#shX').addEventListener('click', close);
+    }
+    wire();
+  });
+};
+
+/* ---------- gráficos ---------- */
+var PAL = ['#2f5bea', '#d92d20', '#16a34a', '#f59e0b', '#9333ea', '#0891b2'];
+function niceStep(range, target) { var raw = range / target, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function splitList(s) { return String(s).split(/[;\n]+/).map(function (t) { return t.trim(); }).filter(Boolean).slice(0, 6); }
+function plot2D(fnTexts, x0, x1, opt) {
+  var fns = fnTexts.map(function (t) { var f = M.compile(t.replace(/^\s*(f|y|g|h)\s*\(?\s*x?\s*\)?\s*=\s*/i, '')); return { t: t, f: f }; });
+  var W = 560, H = 400, N = 400, i, k, ys = [];
+  fns.forEach(function (g) { g.v = []; for (i = 0; i <= N; i++) { var x = x0 + (x1 - x0) * i / N, y = g.f(x, 0); g.v.push(isFinite(y) ? y : NaN); if (isFinite(y)) ys.push(y); } });
+  var y0, y1;
+  if (opt.ymin != null && opt.ymax != null) { y0 = opt.ymin; y1 = opt.ymax; }
+  else if (!ys.length) throw new Error('Não consegui calcular valores para essa função nesse intervalo.');
+  else { ys.sort(function (a, b) { return a - b; }); var lo = ys[Math.floor(ys.length * 0.03)], hi = ys[Math.floor(ys.length * 0.97)]; if (hi - lo < 1e-9) { lo -= 1; hi += 1; } var pd = (hi - lo) * 0.12; y0 = lo - pd; y1 = hi + pd; if (y0 > 0 && y0 < (y1 - y0) * 0.5) y0 = Math.min(0, y0); if (y1 < 0 && -y1 < (y1 - y0) * 0.5) y1 = Math.max(0, y1); }
+  var px = function (x) { return (x - x0) / (x1 - x0) * W; }, py = function (y) { return H - (y - y0) / (y1 - y0) * H; };
+  var items = [], texts = [], sx = niceStep(x1 - x0, 8), sy = niceStep(y1 - y0, 6), v;
+  var fsz = 15, col = '#6b7280';
+  items.push({ p: [[0, 0], [W, 0], [W, H], [0, H], [0, 0]], c: '#cbd5e1', w: 1.4 });
+  if (opt.grid) {
+    for (v = Math.ceil(x0 / sx) * sx; v <= x1 + 1e-9; v += sx) items.push({ p: [[px(v), 0], [px(v), H]], c: '#e2e8f0', w: 1 });
+    for (v = Math.ceil(y0 / sy) * sy; v <= y1 + 1e-9; v += sy) items.push({ p: [[0, py(v)], [W, py(v)]], c: '#e2e8f0', w: 1 });
+  }
+  var ax = Math.min(Math.max(px(0), 0), W), ay = Math.min(Math.max(py(0), 0), H);
+  items.push({ p: [[0, ay], [W, ay]], c: '#14171c', w: 2 }, { p: headAt([W, ay], [W - 30, ay], 12, 0.45), c: '#14171c', w: 2 }, { p: [[ax, H], [ax, 0]], c: '#14171c', w: 2 }, { p: headAt([ax, 0], [ax, 30], 12, 0.45), c: '#14171c', w: 2 });
+  for (v = Math.ceil(x0 / sx) * sx; v <= x1 + 1e-9; v += sx) { if (Math.abs(v) < sx * 1e-6) continue; items.push({ p: [[px(v), ay - 5], [px(v), ay + 5]], c: '#14171c', w: 1.6 }); texts.push(mkText(M.fmt(Math.round(v / sx * 1e6) / 1e6 * sx), px(v) - 14, Math.min(ay + 6, H - 4), fsz, col, { w: 80 })); }
+  for (v = Math.ceil(y0 / sy) * sy; v <= y1 + 1e-9; v += sy) { if (Math.abs(v) < sy * 1e-6) continue; items.push({ p: [[ax - 5, py(v)], [ax + 5, py(v)]], c: '#14171c', w: 1.6 }); texts.push(mkText(M.fmt(Math.round(v / sy * 1e6) / 1e6 * sy), Math.max(ax - 58, -64), py(v) - 11, fsz, col, { w: 54 })); }
+  texts.push(mkText('x', W - 14, ay - 30, 17, '#14171c', { w: 40 }), mkText('y', ax + 10, -4, 17, '#14171c', { w: 40 }));
+  fns.forEach(function (g, gi) {
+    var cur = [], c = PAL[gi % PAL.length];
+    function flush() { if (cur.length > 1) items.push({ p: cur, c: c, w: 3 }); cur = []; }
+    for (i = 0; i <= N; i++) {
+      var y = g.v[i], x = x0 + (x1 - x0) * i / N;
+      if (!isFinite(y) || y < y0 - (y1 - y0) * 0.6 || y > y1 + (y1 - y0) * 0.6) { flush(); continue; }
+      if (cur.length && Math.abs(py(y) - cur[cur.length - 1][1]) > H * 0.45) flush();
+      var cy = Math.max(-6, Math.min(H + 6, py(y))); cur.push([px(x), cy]);
+    }
+    flush();
+    texts.push(mkText('y = ' + g.t.replace(/\*/g, '·'), 8, H + 24 + gi * 24, 17, c, { w: 520 }));
+  });
+  return { items: items, texts: texts };
+}
+function plot3D(ftxt, x0, x1, y0, y1) {
+  var f = M.compile(ftxt.replace(/^\s*(f|z)\s*\(?\s*x?\s*,?\s*y?\s*\)?\s*=\s*/i, '')), W = 520, H = 440, G = 34, az = 0.62, el = 0.5, i, j, zs = [];
+  var Z = [], X = [], Y = [];
+  for (i = 0; i <= G; i++) { Z[i] = []; for (j = 0; j <= G; j++) { var x = x0 + (x1 - x0) * i / G, y = y0 + (y1 - y0) * j / G, z = f(x, y); Z[i][j] = isFinite(z) ? z : NaN; if (isFinite(z)) zs.push(z); } }
+  if (!zs.length) throw new Error('Não consegui calcular valores para essa função.');
+  zs.sort(function (a, b) { return a - b; }); var zlo = zs[0], zhi = zs[zs.length - 1]; if (zhi - zlo < 1e-9) { zlo -= 1; zhi += 1; }
+  function proj(i, j, z) {
+    var u = (i / G - 0.5) * 2, v = (j / G - 0.5) * 2, w = ((z - zlo) / (zhi - zlo) - 0.5) * 1.3;
+    var a = u * Math.cos(az) - v * Math.sin(az), d = u * Math.sin(az) + v * Math.cos(az);
+    return { x: a, y: -(w * Math.cos(el) + d * Math.sin(el)), d: d * Math.cos(el) - w * Math.sin(el) };
+  }
+  /* x da tela = a; y da tela = -(w·cos + d·sin); d = distância ao observador (menor = mais perto) */
+  var pts = [], minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+  for (i = 0; i <= G; i++) { pts[i] = []; for (j = 0; j <= G; j++) { var z0 = isFinite(Z[i][j]) ? Z[i][j] : zlo, p = proj(i, j, z0); pts[i][j] = p; minx = Math.min(minx, p.x); maxx = Math.max(maxx, p.x); miny = Math.min(miny, p.y); maxy = Math.max(maxy, p.y); } }
+  var k = Math.min((W - 20) / (maxx - minx), (H - 20) / (maxy - miny)), ox = (W - (maxx - minx) * k) / 2, oy = (H - (maxy - miny) * k) / 2;
+  function S2(p) { return [ox + (p.x - minx) * k, oy + (p.y - miny) * k]; }
+  /* z-buffer: rasteriza os triângulos da malha (profundidade menor = mais perto) */
+  var zb = new Float32Array(W * H).fill(1e9);
+  function tri(a, b, c) {
+    var A = S2(a), B = S2(b), C = S2(c), x0 = Math.max(0, Math.floor(Math.min(A[0], B[0], C[0]))), x1 = Math.min(W - 1, Math.ceil(Math.max(A[0], B[0], C[0]))), y0b = Math.max(0, Math.floor(Math.min(A[1], B[1], C[1]))), y1b = Math.min(H - 1, Math.ceil(Math.max(A[1], B[1], C[1])));
+    var den = (B[1] - C[1]) * (A[0] - C[0]) + (C[0] - B[0]) * (A[1] - C[1]); if (Math.abs(den) < 1e-9) return;
+    for (var yy = y0b; yy <= y1b; yy++) for (var xx = x0; xx <= x1; xx++) {
+      var l1 = ((B[1] - C[1]) * (xx - C[0]) + (C[0] - B[0]) * (yy - C[1])) / den, l2 = ((C[1] - A[1]) * (xx - C[0]) + (A[0] - C[0]) * (yy - C[1])) / den, l3 = 1 - l1 - l2;
+      if (l1 < -1e-6 || l2 < -1e-6 || l3 < -1e-6) continue;
+      var dep = l1 * a.d + l2 * b.d + l3 * c.d, idx = yy * W + xx; if (dep < zb[idx]) zb[idx] = dep;
+    }
+  }
+  for (i = 0; i < G; i++) for (j = 0; j < G; j++) { if (isNaN(Z[i][j]) || isNaN(Z[i + 1][j]) || isNaN(Z[i][j + 1]) || isNaN(Z[i + 1][j + 1])) continue; tri(pts[i][j], pts[i + 1][j], pts[i][j + 1]); tri(pts[i + 1][j], pts[i + 1][j + 1], pts[i][j + 1]); }
+  function visible(p, s) { var xx = Math.round(s[0]), yy = Math.round(s[1]); if (xx < 0 || yy < 0 || xx >= W || yy >= H) return true; var m = 1e9; for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) { var X2 = xx + dx, Y2 = yy + dy; if (X2 >= 0 && Y2 >= 0 && X2 < W && Y2 < H) m = Math.min(m, zb[Y2 * W + X2]); } return p.d <= m + 0.06; }
+  var items = [], SUB = 3;
+  function line(getPt, n) {
+    var cur = [];
+    for (var s = 0; s <= n * SUB; s++) {
+      var t = s / SUB, i0 = Math.min(Math.floor(t), n - 1), fr = t - i0, a = getPt(i0), b = getPt(i0 + 1);
+      if (a == null || b == null) { if (cur.length > 1) items.push({ p: cur, c: '#2f5bea', w: 1.7 }); cur = []; continue; }
+      var q = { x: a.x + (b.x - a.x) * fr, y: a.y + (b.y - a.y) * fr, d: a.d + (b.d - a.d) * fr }, sp = S2(q);
+      if (visible(q, sp)) cur.push(sp); else { if (cur.length > 1) items.push({ p: cur, c: '#2f5bea', w: 1.7 }); cur = []; }
+    }
+    if (cur.length > 1) items.push({ p: cur, c: '#2f5bea', w: 1.7 });
+  }
+  var step = 2;
+  for (j = 0; j <= G; j += step) (function (jj) { line(function (ii) { return isNaN(Z[ii][jj]) ? null : pts[ii][jj]; }, G); })(j);
+  for (i = 0; i <= G; i += step) (function (ii) { line(function (jj) { return isNaN(Z[ii][jj]) ? null : pts[ii][jj]; }, G); })(i);
+  /* moldura da base */
+  function base(a, b) {
+    var A = proj(a[0], a[1], zlo), B = proj(b[0], b[1], zlo), cur = [], t;
+    for (t = 0; t <= 60; t++) {
+      var q = { x: A.x + (B.x - A.x) * t / 60, y: A.y + (B.y - A.y) * t / 60, d: A.d + (B.d - A.d) * t / 60 }, sp = S2(q);
+      if (visible(q, sp)) cur.push(sp); else { if (cur.length > 1) items.push({ p: cur, c: '#94a3b8', w: 1.4 }); cur = []; }
+    }
+    if (cur.length > 1) items.push({ p: cur, c: '#94a3b8', w: 1.4 });
+  }
+  base([0, 0], [G, 0]); base([G, 0], [G, G]); base([G, G], [0, G]); base([0, G], [0, 0]);
+  items = items.filter(function (it) { var L = 0; for (var z = 1; z < it.p.length; z++) L += Math.hypot(it.p[z][0] - it.p[z - 1][0], it.p[z][1] - it.p[z - 1][1]); return L > 5; });
+  var texts = [mkText('z = ' + ftxt.replace(/\*/g, '·'), 6, H + 10, 17, '#2f5bea', { w: 500 }), mkText('x: ' + M.fmt(x0) + ' a ' + M.fmt(x1) + '   y: ' + M.fmt(y0) + ' a ' + M.fmt(y1) + '   z: ' + M.fmt(Math.round(zlo * 100) / 100) + ' a ' + M.fmt(Math.round(zhi * 100) / 100), 6, H + 36, 15, '#6b7280', { w: 520 })];
+  return { items: items, texts: texts };
+}
+CP.graphMenu = function (pref) {
+  pref = pref || {};
+  var mode = pref.mode || '2d';
+  function html() {
+    return '<h3>Gráfico</h3><div class="row" style="display:flex;gap:6px"><button type="button" class="chip' + (mode === '2d' ? ' on' : '') + '" data-m="2d">2D · y = f(x)</button><button type="button" class="chip' + (mode === '3d' ? ' on' : '') + '" data-m="3d">3D · z = f(x, y)</button></div>' +
+      '<input id="gF" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Função" placeholder="' + (mode === '2d' ? 'ex.: x^2 - 4 ; sin(x)   (várias com ;)' : 'ex.: sin(x)*cos(y)   ou   x^2 + y^2') + '" value="' + esc(pref.f || '') + '">' +
+      '<div style="display:flex;gap:8px"><input id="gX0" type="text" inputmode="decimal" style="flex:1;min-width:0" aria-label="x mínimo" value="' + (mode === '2d' ? '-10' : '-3') + '"><input id="gX1" type="text" inputmode="decimal" style="flex:1;min-width:0" aria-label="x máximo" value="' + (mode === '2d' ? '10' : '3') + '"></div><small style="color:var(--muted)">x de … até …' + (mode === '3d' ? ' (y usa o mesmo intervalo por padrão)' : '') + '</small>' +
+      (mode === '3d' ? '<div style="display:flex;gap:8px"><input id="gY0" type="text" inputmode="decimal" style="flex:1;min-width:0" aria-label="y mínimo" value="-3"><input id="gY1" type="text" inputmode="decimal" style="flex:1;min-width:0" aria-label="y máximo" value="3"></div><small style="color:var(--muted)">y de … até …</small>' : '<label style="display:flex;gap:8px;align-items:center"><input id="gG" type="checkbox" checked style="min-height:0;width:20px;height:20px"> Mostrar grade</label>') +
+      '<div id="gMsg" style="color:var(--danger);font-size:14px;min-height:18px"></div><div class="btns"><button type="button" id="gNo">Cancelar</button><button type="button" class="ok" id="gOk">Inserir na nota</button></div>';
+  }
+  CP.ui.sheetMenu(html(), function (h, close) {
+    function wire() {
+      CP.$$('[data-m]', h).forEach(function (b) { b.addEventListener('click', function () { pref.f = h.querySelector('#gF').value; mode = b.getAttribute('data-m'); h.querySelector('.box').innerHTML = html(); wire(); }); });
+      h.querySelector('#gNo').addEventListener('click', close);
+      h.querySelector('#gOk').addEventListener('click', function () {
+        var msg = h.querySelector('#gMsg'), f = h.querySelector('#gF').value.trim(), num = function (id, d) { var el = h.querySelector(id); if (!el) return d; var v = parseFloat(String(el.value).replace(',', '.')); return isFinite(v) ? v : d; };
+        if (!f) { msg.textContent = 'Escreva a função (por exemplo x^2 - 4).'; return; }
+        try {
+          var x0 = num('#gX0', -10), x1 = num('#gX1', 10); if (x1 <= x0) throw new Error('O valor máximo de x precisa ser maior que o mínimo.');
+          var res;
+          if (mode === '2d') res = plot2D(splitList(f), x0, x1, { grid: h.querySelector('#gG').checked });
+          else { var y0 = num('#gY0', -3), y1 = num('#gY1', 3); if (y1 <= y0) throw new Error('O valor máximo de y precisa ser maior que o mínimo.'); res = plot3D(f, x0, x1, y0, y1); }
+          close(); moveTo(res.items, res.texts, viewCenter()); insertItems(res.items, res.texts);
+        } catch (e) { msg.textContent = e.message || 'Não consegui desenhar essa função.'; }
+      });
+    }
+    wire();
+  });
+};
+
+/* ---------- resolvedor ---------- */
+CP.solveMenu = function (pref) {
+  var last = null;
+  CP.ui.sheetMenu('<h3>Resolver conta ou equação</h3>' +
+    '<input id="sIn" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Conta ou equação" placeholder="Escreva aqui: 123 × 45  ·  2x² − 3x − 5 = 0" value="' + esc(pref && pref.q || '') + '">' +
+    '<div id="sKeys" style="display:flex;flex-wrap:wrap;gap:6px">' + ['+', '−', '×', '÷', '^', '²', '³', '√(', '(', ')', '=', 'x', 'π', ';'].map(function (k) { return '<button type="button" class="chip" data-k="' + k + '" style="min-width:42px;min-height:40px">' + k + '</button>'; }).join('') + '</div>' +
+    '<small style="color:var(--muted)">Com a Apple Pencil, escreva dentro do campo: o iPad converte a letra em texto (Scribble). Aceita somas, subtrações, multiplicações e divisões armadas, expressões, equações de 1º, 2º, 3º grau ou mais, e sistemas com duas equações separadas por ;</small>' +
+    '<pre id="sOut" style="margin:0;max-height:38vh;overflow:auto;background:var(--panel-2);border-radius:12px;padding:12px;font:14px/1.4 ui-monospace,Menlo,monospace;white-space:pre;display:none"></pre>' +
+    '<div id="sErr" style="color:var(--danger);font-size:14px"></div>' +
+    '<div class="btns" style="flex-wrap:wrap"><button type="button" id="sNo">Fechar</button><button type="button" id="sGr" style="display:none">Gráfico</button><button type="button" id="sIns" style="display:none">Inserir na nota</button><button type="button" class="ok" id="sGo">Resolver</button></div>',
+    function (h, close) {
+      wide(h); var box = h.querySelector('.box'); box.style.width = 'min(640px,100%)';
+      var inp = h.querySelector('#sIn'), out = h.querySelector('#sOut'), err = h.querySelector('#sErr');
+      function go() {
+        var r = CP.math.solve(inp.value); last = r; err.textContent = '';
+        if (r.error) { out.style.display = 'none'; h.querySelector('#sIns').style.display = 'none'; h.querySelector('#sGr').style.display = 'none'; err.textContent = r.error; return; }
+        out.style.display = 'block'; out.textContent = r.lines.join('\n');
+        h.querySelector('#sIns').style.display = ''; h.querySelector('#sGr').style.display = r.fn ? '' : 'none';
+      }
+      CP.$$('[data-k]', h).forEach(function (b) { b.addEventListener('click', function () { var k = b.getAttribute('data-k'), s = inp.selectionStart == null ? inp.value.length : inp.selectionStart, e = inp.selectionEnd == null ? s : inp.selectionEnd; inp.value = inp.value.slice(0, s) + k + inp.value.slice(e); var pos = s + k.length; inp.focus(); try { inp.setSelectionRange(pos, pos); } catch (x) {} }); });
+      inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+      h.querySelector('#sGo').addEventListener('click', go);
+      h.querySelector('#sNo').addEventListener('click', close);
+      h.querySelector('#sGr').addEventListener('click', function () { var f = last && last.fn; var q = inp.value; close(); CP.graphMenu({ mode: '2d', f: f || q }); });
+      h.querySelector('#sIns').addEventListener('click', function () {
+        if (!last || last.error) return;
+        var lines = [inp.value.trim(), ''].concat(last.lines).join('\n').replace(/\n{3,}/g, '\n\n'), maxc = Math.max.apply(null, lines.split('\n').map(function (l) { return l.length; })), size = 20, wpx = Math.min(900, Math.max(260, Math.round(maxc * size * 0.62) + 28));
+        var c = viewCenter(), tx = mkText(lines, 60, c.y - 80, size, S.pen.c, { w: wpx, mono: true });
+        close(); var n = note(); n.texts.push(tx); E.push({ t: 'tadd', tx: tx }); if (E.placeTexts) E.placeTexts(); CP.queueSave(n); CP.toast('Rascunho inserido. Toque nele para editar ou arraste pela bolinha.');
+      });
+      if (pref && pref.q) go(); else setTimeout(function () { try { inp.focus(); } catch (x) {} }, 120);
+    });
+};
+
+CP.mathApi = { plot2D: plot2D, plot3D: plot3D, shapes: SH, place: placeShape };
 })();
 (function () {
 'use strict';
