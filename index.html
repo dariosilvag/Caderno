@@ -138,6 +138,11 @@ svg { display: block; }
 .tool .dot { position: absolute; bottom: 5px; width: 14px; height: 4px; border-radius: 2px; }
 .sep { width: 1px; height: 26px; background: var(--line); margin: 0 4px; flex: none; }
 .swatch { width: 34px; height: 34px; border-radius: 17px; border: 3px solid var(--bar); box-shadow: 0 0 0 1.5px var(--line); flex: none; margin: 0 3px; }
+.swatch.rainbow { background: conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); color: #fff; font-weight: 800; font-size: 20px; line-height: 1; display: grid; place-items: center; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
+.cplbl { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.sheetmenu .cslide, .cslide { -webkit-appearance: none; appearance: none; height: 28px; border-radius: 14px; border: 1px solid var(--line); padding: 0; min-height: 0 !important; }
+.cslide::-webkit-slider-thumb { -webkit-appearance: none; width: 32px; height: 32px; border-radius: 16px; background: #fff; border: 3px solid #475569; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+.cslide::-moz-range-thumb { width: 28px; height: 28px; border-radius: 14px; background: #fff; border: 3px solid #475569; }
 .swatch.on { box-shadow: 0 0 0 2.5px var(--accent); }
 
 .pop { position: absolute; bottom: calc(max(18px, env(safe-area-inset-bottom, 0px)) + 66px); left: 50%; transform: translateX(-50%); background: var(--bar); -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); padding: 14px; width: min(340px, calc(100% - 24px)); z-index: 6; display: flex; flex-direction: column; gap: 12px; }
@@ -277,6 +282,8 @@ html, body { overflow: hidden; }
 .m3d.cutting .cutbar { display: flex; }
 .m3d .cutbar input { flex: 1; min-width: 0; }
 .vtag{font:600 12px/1 system-ui,sans-serif;background:var(--accent,#7c8cff);color:#fff;border-radius:8px;padding:3px 7px;margin-left:8px;vertical-align:middle}.vtag.bad{background:#e5484d}
+.connbar{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:center;max-width:94vw;padding:8px 10px;border-radius:16px;background:var(--panel);box-shadow:0 6px 24px rgba(0,0,0,.28);font-size:14px}.connbar .cmsg{font-weight:600;padding:0 6px}.connbar button{min-height:40px;padding:0 12px;border-radius:12px;background:var(--panel-2);color:var(--ink);font-weight:600}.connbar button.on{background:#2f5bea;color:#fff}.connbar button.ok{background:#16a34a;color:#fff}
+.chide{display:none!important}
 </style></head><body><div id="app" data-view="list">
   <aside id="side" aria-label="Pastas">
     <div class="brand"><i><svg class="ico" data-ico="pen"></svg></i>Caderno <span id="verTag" class="vtag"></span></div>
@@ -514,7 +521,7 @@ function noteBody(n) { var o = {}; for (var k in n) o[k] = n[k]; return o; }
 
 function persistLocal() {}
 function persistMeta() {
-  var meta = { folders: S.folders, prefs: { tool: S.tool, pen: S.pen, hl: S.hl, penOnly: S.penOnly, snap: S.snap, theme: S.theme, autoSolve: S.autoSolve } };
+  var meta = { folders: S.folders, prefs: { tool: S.tool, pen: S.pen, hl: S.hl, penOnly: S.penOnly, snap: S.snap, theme: S.theme, autoSolve: S.autoSolve, gridSnap: S.gridSnap, custom: S.custom, customColors: S.customColors } };
   run('meta', 'readwrite', function (s) { return s.put(meta, 'meta'); }).catch(function () {});
 }
 var saveTimers = {};
@@ -566,6 +573,9 @@ function applyPrefs(p) {
   if (typeof p.penOnly === 'boolean') S.penOnly = p.penOnly;
   if (typeof p.snap === 'boolean') S.snap = p.snap;
   if (typeof p.autoSolve === 'boolean') S.autoSolve = p.autoSolve;
+  if (typeof p.gridSnap === 'boolean') S.gridSnap = p.gridSnap;
+  if (p.custom && typeof p.custom === 'object') { var cu = p.custom, ok = function (a) { return Array.isArray(a) ? a.filter(function (x) { return typeof x === 'string'; }).slice(0, 40) : []; }; S.custom = { hide: ok(cu.hide), tools: ok(cu.tools), dock: { A: ok(cu.dock && cu.dock.A), B: ok(cu.dock && cu.dock.B), C: ok(cu.dock && cu.dock.C) } }; }
+  if (Array.isArray(p.customColors)) S.customColors = p.customColors.filter(function (c) { return /^#[0-9a-f]{6}$/i.test(c); }).slice(0, 14);
   if (p.tool && p.tool !== 'listen') S.tool = p.tool;
   if (p.theme) S.theme = p.theme;
 }
@@ -590,7 +600,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&
 window.CP = { $: $, $$: $$, S: S, icon: icon, svgIcon: svgIcon, paintIcons: paintIcons, COLORS: COLORS, HL_COLORS: HL_COLORS, PAPERS: PAPERS,
   PAGE_W: PAGE_W, PAGE_H: PAGE_H, uid: uid, newNote: newNote, byId: byId, cur: cur, queueSave: queueSave, flushSave: flushSave,
   persistLocal: persistLocal, persistMeta: persistMeta, deleteForever: deleteForever, initStore: initStore, toast: toast,
-  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v14' };
+  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v17' };
 })();
 (function () {
 'use strict';
@@ -697,6 +707,7 @@ function drawStroke(c, s) {
 
 function redraw() {
   var n = CP.cur(); if (!n) return;
+  if (CP.hooks.preRedraw) CP.hooks.preRedraw(n);
   ictx.setTransform(dpr * sc, 0, 0, dpr * sc, 0, 0);
   ictx.clearRect(0, 0, CP.PAGE_W, n.pages * CP.PAGE_H);
   darkNow = isDark(n); var vis = CP.layers ? CP.layers.vis : function () { return true; };
@@ -1451,7 +1462,8 @@ function tableEl(o) {
     row.forEach(function (txt, c) {
       var td = document.createElement('td'); td.contentEditable = 'true'; td.spellcheck = false; td.textContent = txt;
       if (r === 0 && o.header) { td.style.fontWeight = '700'; td.style.background = 'rgba(47,91,234,.12)'; }
-      td.addEventListener('focus', function () { select(o.id, el); });
+      td.addEventListener('focus', function () { select(o.id, el); if (O.cellFocus) O.cellFocus(o, r, c, td); });
+      td.addEventListener('blur', function () { if (O.cellBlur) O.cellBlur(o, r, c, td, t); });
       td.addEventListener('input', function () { o.rows[r][c] = td.innerText; CP.queueSave(note()); });
       td.addEventListener('keydown', function (e) {
         if (e.key === 'Tab') { e.preventDefault(); var all = CP.$$('td', t), i = all.indexOf(td) + (e.shiftKey ? -1 : 1); if (all[i]) all[i].focus(); else if (!e.shiftKey) { addRow(o); } }
@@ -1468,6 +1480,7 @@ function tableEl(o) {
     bt.addEventListener('pointerdown', function (e) { e.preventDefault(); });
     bt.addEventListener('click', b[1]); tb.appendChild(bt);
   });
+  if (O.tableExtra) O.tableExtra(o, tb);
   el.appendChild(tb);
   return el;
 }
@@ -1498,7 +1511,7 @@ function downscale(file, max, q) {
   });
 }
 O.addImage = function (file) {
-  downscale(file, 1800, 0.86).then(function (r) {
+  return downscale(file, 1800, 0.86).then(function (r) {
     var w = Math.min(560, r.w), h = Math.round(w * r.h / r.w);
     var o = { id: CP.uid(), type: 'img', x: 90, y: Math.max(60, nearest()), w: w, h: h, url: '' };
     return O.keepFile(r.blob, 'image').then(function (u) {
@@ -2247,7 +2260,7 @@ function del() {
 function dup() {
   var n = note(), subs = [], copies = [], gmap = {}, gt = gtexts();
   sel.forEach(function (s) {
-    var c = JSON.parse(JSON.stringify(s)); delete c.t; delete c.ar; if (c.g) { gmap[c.g] = gmap[c.g] || CP.uid(); c.g = gmap[c.g]; }
+    var c = JSON.parse(JSON.stringify(s)); delete c.t; delete c.ar; delete c.cn; if (c.g) { gmap[c.g] = gmap[c.g] || CP.uid(); c.g = gmap[c.g]; }
     for (var i = 0; i < c.d.length; i += 3) { c.d[i] += 40; c.d[i + 1] += 40; }
     n.strokes.push(c); subs.push({ t: 'add', s: c }); copies.push(c);
   });
@@ -2280,7 +2293,10 @@ function sizeMenu() {
 }
 function colorMenu() {
   var cols = CP.COLORS.concat(CP.HL_COLORS);
-  CP.ui.sheetMenu('<h3>Cor da seleção</h3><div class="row" style="display:flex;flex-wrap:wrap;gap:10px;padding:6px 0">' + cols.map(function (c) { return '<button type="button" class="swatch" data-c="' + c + '" style="background:' + c + ';width:40px;height:40px"></button>'; }).join('') + '</div>', function (h, close) {
+  cols = cols.concat((S.customColors || []).filter(function (c) { return cols.indexOf(c) < 0; }));
+  CP.ui.sheetMenu('<h3>Cor da seleção</h3><div class="row" style="display:flex;flex-wrap:wrap;gap:10px;padding:6px 0">' + cols.map(function (c) { return '<button type="button" class="swatch" data-c="' + c + '" style="background:' + c + ';width:40px;height:40px"></button>'; }).join('') + '<button type="button" class="swatch rainbow" data-more="1" style="width:40px;height:40px">+</button></div>', function (h, close) {
+    var more = h.querySelector('[data-more]');
+    if (more) more.addEventListener('click', function () { close(); CP.colorPicker('#2f5bea', function (c) { var items = sel.map(function (s) { return { s: s, from: copyState(s) }; }); sel.forEach(function (s) { s.c = c; }); commit(items); E.redraw(); }); });
     CP.$$('[data-c]', h).forEach(function (b) {
       b.addEventListener('click', function () {
         var c = b.getAttribute('data-c'), items = sel.map(function (s) { return { s: s, from: copyState(s) }; });
@@ -2340,7 +2356,7 @@ CP.lasso = {
     }
   },
   up: function () {
-    if (mode === 'move') { commit(snap, tsn); mode = null; render(); return; }
+    if (mode === 'move') { if (CP.snapMove) { bounds(); CP.snapMove(snap, tsn, box); if (tsn.length && E.placeTexts) E.placeTexts(); E.redraw(); bounds(); } commit(snap, tsn); mode = null; render(); return; }
     if (mode === 'draw') {
       E.drawLive(null); mode = null;
       if (path.length < 4) return;
@@ -2717,6 +2733,7 @@ CP.renderTools = function (closePops) {
   var items = [
     ['globe', 'Navegador', false, function () { CP.objs.addWeb(); S.tool = 'select'; if (CP.hooks.toolChanged) CP.hooks.toolChanged(); CP.persistMeta(); }],
     ['shapes', 'Formas', false, function () { CP.shapesMenu(); }],
+    ['tools', 'Engenharia', false, function () { CP.engMenu(); }],
     ['calc', 'Resolver', false, function () { CP.solveMenu(); }],
     ['calc', S.autoSolve === false ? 'Auto-resolver: não' : 'Auto-resolver: sim', S.autoSolve !== false, function () { S.autoSolve = S.autoSolve === false; CP.persistMeta(); CP.toast(S.autoSolve === false ? 'Resolver sozinho: desligado' : 'Resolver sozinho: ligado'); }],
     ['chart', 'Gráfico', false, function () { CP.graphMenu(); }],
@@ -2734,6 +2751,9 @@ CP.renderTools = function (closePops) {
     ['tools', 'Diagnóstico', false, function () { CP.diag(); }],
     ['pdf', 'Atualizar app', false, function () { CP.toast('Atualizando…'); CP.forceUpdate(); }]
   ];
+  items.forEach(function (it, i) { it.key = CP.TOOL_KEYS[i]; });
+  if (CP.custom) items = CP.custom.arrange(items);
+  items.push(['tools', 'Personalizar', false, function () { CP.customMenu('dock'); }]);
   items.forEach(function (it) {
     var b = document.createElement('button'); b.type = 'button'; b.className = 'insbtn' + (it[2] ? ' on' : '');
     b.innerHTML = CP.svgIcon(it[0]) + '<span>' + it[1] + '</span>';
@@ -3423,6 +3443,7 @@ function hs(w, h) { return Math.min(Math.max(14, Math.min(w, h) * 0.35), 34, w *
 /* ---------- biblioteca ---------- */
 var CATS = ['Básicas', 'Setas', 'Sólidos', 'Fluxograma', 'Eletrônica', 'Matemática'];
 var SH = [];
+function cats() { var o = CATS.slice(); SH.forEach(function (s) { if (o.indexOf(s.cat) < 0) o.push(s.cat); }); return o; }
 function def(cat, name, w, h, fn) { SH.push({ cat: cat, name: name, w: w, h: h, make: fn }); }
 /* básicas */
 def('Básicas', 'Linha', 240, 0.01, function (w, h) { return P([[[0, 0], [w, 0]]]); });
@@ -3505,18 +3526,24 @@ def('Matemática', 'Onda senoidal', 320, 130, function (w, h) { var o = [], i; f
 
 function thumb(sh) {
   var W = 100, H = 70, k = Math.min((W - 12) / sh.w, (H - 12) / Math.max(sh.h, 1)), w = sh.w * k, h = Math.max(sh.h, 8) * k, items = sh.make(sh.w, Math.max(sh.h, 8)), d = '';
-  items.forEach(function (it) { it.p.forEach(function (q, i) { d += (i ? 'L' : 'M') + (6 + (W - 12 - w) / 2 + q[0] * k).toFixed(1) + ' ' + (6 + (H - 12 - h) / 2 + q[1] * k).toFixed(1); }); });
+  items.forEach(function (it) { if (it.txt != null) return; it.p.forEach(function (q, i) { d += (i ? 'L' : 'M') + (6 + (W - 12 - w) / 2 + q[0] * k).toFixed(1) + ' ' + (6 + (H - 12 - h) / 2 + q[1] * k).toFixed(1); }); });
   return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="56" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>';
 }
 function placeShape(sh, at) {
-  var items = sh.make(sh.w, Math.max(sh.h, 0.01)).map(function (it) { return { p: it.p.map(function (q) { return [q[0], q[1]]; }), c: it.c, w: it.w }; });
-  moveTo(items, [], at || viewCenter()); insertItems(items, []);
+  var raw = sh.make(sh.w, Math.max(sh.h, 0.01)), items = [], texts = [];
+  raw.forEach(function (it) {
+    if (it.txt != null) { var sz = it.size || 22, ww = Math.max(40, Math.round(it.txt.length * sz * 0.62) + 16), t = mkText(it.txt, it.x - ww / 2, it.y - sz * 0.8, sz, it.c, { w: ww }); texts.push(t); }
+    else items.push({ p: it.p.map(function (q) { return [q[0], q[1]]; }), c: it.c, w: it.w });
+  });
+  moveTo(items, texts, at || viewCenter()); insertItems(items, texts);
 }
+function placeAt(items, texts, at) { moveTo(items, texts || [], at || viewCenter()); insertItems(items, texts || []); }
 function wide(host) { var b = host.querySelector('.box'); if (b) { b.style.width = 'min(760px,100%)'; b.style.maxHeight = '84vh'; b.style.overflow = 'auto'; } }
 var catSel = 'Básicas';
-CP.shapesMenu = function () {
+CP.shapesMenu = function (cat) {
+  if (cat && SH.some(function (x) { return x.cat === cat; })) catSel = cat;
   function html() {
-    return '<h3>Formas prontas</h3><div class="row" id="shCats" style="display:flex;flex-wrap:wrap;gap:6px">' + CATS.map(function (c) { return '<button type="button" class="chip' + (c === catSel ? ' on' : '') + '" data-c="' + c + '">' + c + '</button>'; }).join('') + '</div>' +
+    return '<h3>Formas prontas</h3><div class="row" id="shCats" style="display:flex;flex-wrap:wrap;gap:6px">' + cats().map(function (c) { return '<button type="button" class="chip' + (c === catSel ? ' on' : '') + '" data-c="' + c + '">' + c + '</button>'; }).join('') + '</div>' +
       '<div id="shGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px">' + SH.filter(function (s) { return s.cat === catSel; }).map(function (s) { var i = SH.indexOf(s); return '<button type="button" class="shbtn" data-i="' + i + '" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;border-radius:12px;background:var(--panel-2);font-size:12px;font-weight:600;color:var(--ink)">' + thumb(s) + '<span>' + esc(s.name) + '</span></button>'; }).join('') + '</div>' +
       '<p style="margin:2px 0 0;color:var(--muted);font-size:13px">A forma entra no meio da tela já selecionada: arraste para mover e use os puxadores ↔ ↕ para mudar largura e altura.</p><button type="button" class="opt" id="shX">Fechar</button>';
   }
@@ -3536,7 +3563,7 @@ var PAL = ['#2f5bea', '#d92d20', '#16a34a', '#f59e0b', '#9333ea', '#0891b2'];
 function niceStep(range, target) { var raw = range / target, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
 function splitList(s) { return String(s).split(/[;\n]+/).map(function (t) { return t.trim(); }).filter(Boolean).slice(0, 6); }
 function plot2D(fnTexts, x0, x1, opt) {
-  var fns = fnTexts.map(function (t) { var f = M.compile(t.replace(/^\s*(f|y|g|h)\s*\(?\s*x?\s*\)?\s*=\s*/i, '')); return { t: t, f: f }; });
+  var fns = fnTexts.map(function (t) { if (t && typeof t === 'object') return { t: t.t, f: t.f, raw: true }; var f = M.compile(t.replace(/^\s*(f|y|g|h)\s*\(?\s*x?\s*\)?\s*=\s*/i, '')); return { t: t, f: f }; });
   var W = 560, H = 400, N = 400, i, k, ys = [];
   fns.forEach(function (g) { g.v = []; for (i = 0; i <= N; i++) { var x = x0 + (x1 - x0) * i / N, y = g.f(x, 0); g.v.push(isFinite(y) ? y : NaN); if (isFinite(y)) ys.push(y); } });
   var y0, y1;
@@ -3555,7 +3582,7 @@ function plot2D(fnTexts, x0, x1, opt) {
   items.push({ p: [[0, ay], [W, ay]], c: '#14171c', w: 2 }, { p: headAt([W, ay], [W - 30, ay], 12, 0.45), c: '#14171c', w: 2 }, { p: [[ax, H], [ax, 0]], c: '#14171c', w: 2 }, { p: headAt([ax, 0], [ax, 30], 12, 0.45), c: '#14171c', w: 2 });
   for (v = Math.ceil(x0 / sx) * sx; v <= x1 + 1e-9; v += sx) { if (Math.abs(v) < sx * 1e-6) continue; items.push({ p: [[px(v), ay - 5], [px(v), ay + 5]], c: '#14171c', w: 1.6 }); texts.push(mkText(M.fmt(Math.round(v / sx * 1e6) / 1e6 * sx), px(v) - 14, Math.min(ay + 6, H - 4), fsz, col, { w: 80 })); }
   for (v = Math.ceil(y0 / sy) * sy; v <= y1 + 1e-9; v += sy) { if (Math.abs(v) < sy * 1e-6) continue; items.push({ p: [[ax - 5, py(v)], [ax + 5, py(v)]], c: '#14171c', w: 1.6 }); texts.push(mkText(M.fmt(Math.round(v / sy * 1e6) / 1e6 * sy), Math.max(ax - 58, -64), py(v) - 11, fsz, col, { w: 54 })); }
-  texts.push(mkText('x', W - 14, ay - 30, 17, '#14171c', { w: 40 }), mkText('y', ax + 10, -4, 17, '#14171c', { w: 40 }));
+  texts.push(mkText(opt.xl || 'x', W - 14 - (opt.xl ? 150 : 0), ay - 30, 17, '#14171c', { w: opt.xl ? 190 : 40 }), mkText(opt.yl || 'y', ax + 10, -4, 17, '#14171c', { w: opt.yl ? 190 : 40 }));
   fns.forEach(function (g, gi) {
     var cur = [], c = PAL[gi % PAL.length];
     function flush() { if (cur.length > 1) items.push({ p: cur, c: c, w: 3 }); cur = []; }
@@ -3566,7 +3593,7 @@ function plot2D(fnTexts, x0, x1, opt) {
       var cy = Math.max(-6, Math.min(H + 6, py(y))); cur.push([px(x), cy]);
     }
     flush();
-    texts.push(mkText('y = ' + g.t.replace(/\*/g, '·'), 8, H + 24 + gi * 24, 17, c, { w: 520 }));
+    texts.push(mkText((g.raw ? '' : 'y = ') + g.t.replace(/\*/g, '·'), 8, H + 24 + gi * 24, 17, c, { w: 520 }));
   });
   return { items: items, texts: texts };
 }
@@ -3714,7 +3741,7 @@ CP.autoSolve = function (tx, manual) {
   if (E.placeTexts) E.placeTexts(); CP.queueSave(n);
   if (manual) CP.toast('Solução escrita abaixo da conta.');
 };
-CP.mathApi = { plot2D: plot2D, plot3D: plot3D, shapes: SH, place: placeShape };
+CP.mathApi = { plot2D: plot2D, plot3D: plot3D, shapes: SH, place: placeShape, placeAt: placeAt, def: def, viewCenter: viewCenter, mkText: mkText, mkStroke: mkStroke, insertItems: insertItems, helpers: { arc: arc, ell: ell, closed: closed, dashed: dashed, headAt: headAt, P: P, D: D, fitBox: fitBox } };
 })();
 (function () {
 'use strict';
@@ -3777,6 +3804,1168 @@ O.addWeb = function (url) {
   return o;
 };
 CP.web = { norm: normUrl, host: shortHost };
+})();
+(function () {
+'use strict';
+var CP = window.CP, S = CP.S;
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function hsl2hex(h, s, l) {
+  s /= 100; l /= 100; var a = s * Math.min(l, 1 - l);
+  function f(n) { var k = (n + h / 30) % 12, c = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); return Math.round(255 * c).toString(16).padStart(2, '0'); }
+  return '#' + f(0) + f(8) + f(4);
+}
+function hex2hsl(hex) {
+  var r = parseInt(hex.slice(1, 3), 16) / 255, g = parseInt(hex.slice(3, 5), 16) / 255, b = parseInt(hex.slice(5, 7), 16) / 255;
+  var mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, h = 0, s = 0, d = mx - mn;
+  if (d) { s = d / (1 - Math.abs(2 * l - 1)); h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; if (h < 0) h += 360; }
+  return { h: Math.round(h), s: Math.round(s * 100), l: Math.round(l * 100) };
+}
+function normHex(v) {
+  v = String(v || '').trim().toLowerCase(); if (v[0] !== '#') v = '#' + v;
+  if (/^#[0-9a-f]{3}$/.test(v)) v = '#' + v[1] + v[1] + v[2] + v[2] + v[3] + v[3];
+  return /^#[0-9a-f]{6}$/.test(v) ? v : null;
+}
+function toHex(c) {   /* aceita #rgb, #rrggbb e rgb(...) */
+  var h = normHex(c); if (h) return h;
+  var m = /rgba?\((\d+)[ ,]+(\d+)[ ,]+(\d+)/.exec(c || ''); if (m) return '#' + [m[1], m[2], m[3]].map(function (x) { return (+x).toString(16).padStart(2, '0'); }).join('');
+  return '#2f5bea';
+}
+CP.addCustom = function (hex) {
+  var a = (S.customColors || []).filter(function (c) { return c !== hex; }); a.unshift(hex); S.customColors = a.slice(0, 14);
+  if (CP.persistMeta) CP.persistMeta();
+};
+CP.colorPicker = function (init, apply) {
+  var cur = toHex(init), hsl = hex2hsl(cur);
+  var rec = (S.customColors || []).concat(CP.COLORS, CP.HL_COLORS).filter(function (c, i, a) { return a.indexOf(c) === i; });
+  CP.ui.sheetMenu('<h3>Escolher cor</h3>' +
+    '<div style="display:flex;gap:10px;align-items:center"><div id="cpPrev" style="width:56px;height:56px;border-radius:14px;box-shadow:0 0 0 1.5px var(--line);flex:none"></div>' +
+    '<input id="cpHex" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Código da cor" style="flex:1;min-width:0;font-family:ui-monospace,Menlo,monospace;font-size:18px">' +
+    '<label class="chip" style="position:relative;overflow:hidden;min-height:44px;display:flex;align-items:center;padding:0 12px">Seletor<input id="cpNat" type="color" style="position:absolute;inset:0;opacity:0;width:100%;height:100%;min-height:0;padding:0;border:0"></label></div>' +
+    '<label class="cplbl">Matiz<input id="cpH" class="cslide" type="range" min="0" max="360"></label>' +
+    '<label class="cplbl">Intensidade<input id="cpS" class="cslide" type="range" min="0" max="100"></label>' +
+    '<label class="cplbl">Claridade<input id="cpL" class="cslide" type="range" min="0" max="100"></label>' +
+    '<div class="cplbl" style="margin-top:2px">Minhas cores e paletas</div><div id="cpRec" style="display:flex;flex-wrap:wrap;gap:8px"></div>' +
+    '<div class="btns"><button type="button" id="cpNo">Cancelar</button><button type="button" class="ok" id="cpOk">Usar cor</button></div>',
+    function (h, close) {
+      var q = function (s) { return h.querySelector(s); }, H = q('#cpH'), Sl = q('#cpS'), L = q('#cpL'), hex = q('#cpHex'), prev = q('#cpPrev'), nat = q('#cpNat');
+      function paint(fromHex) {
+        cur = hsl2hex(hsl.h, hsl.s, hsl.l);
+        prev.style.background = cur; if (!fromHex) hex.value = cur; nat.value = cur;
+        H.value = hsl.h; Sl.value = hsl.s; L.value = hsl.l;
+        H.style.background = 'linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)';
+        Sl.style.background = 'linear-gradient(90deg,' + hsl2hex(hsl.h, 0, hsl.l) + ',' + hsl2hex(hsl.h, 100, hsl.l) + ')';
+        L.style.background = 'linear-gradient(90deg,#000,' + hsl2hex(hsl.h, hsl.s, 50) + ',#fff)';
+      }
+      function setHex(v) { var n = normHex(v); if (!n) return false; cur = n; hsl = hex2hsl(n); paint(true); return true; }
+      H.addEventListener('input', function () { hsl.h = +H.value; paint(); });
+      Sl.addEventListener('input', function () { hsl.s = +Sl.value; paint(); });
+      L.addEventListener('input', function () { hsl.l = +L.value; paint(); });
+      hex.addEventListener('input', function () { if (setHex(hex.value)) { hex.style.color = ''; } else hex.style.color = 'var(--danger)'; });
+      nat.addEventListener('input', function () { setHex(nat.value); hex.value = nat.value; });
+      var recBox = q('#cpRec');
+      rec.forEach(function (c) {
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'swatch'; b.style.cssText = 'background:' + c + ';margin:0;width:38px;height:38px;border-radius:19px'; b.setAttribute('aria-label', 'Cor ' + c);
+        b.addEventListener('click', function () { var hx = toHex(c); setHex(hx); hex.value = hx; }); recBox.appendChild(b);
+      });
+      q('#cpNo').addEventListener('click', close);
+      q('#cpOk').addEventListener('click', function () { var n = normHex(hex.value) || cur; close(); CP.addCustom(n); apply(n); });
+      setHex(cur); hex.value = cur;
+    });
+};
+CP.rainbowSwatch = function (fn) {
+  var b = document.createElement('button'); b.type = 'button'; b.className = 'swatch rainbow'; b.setAttribute('aria-label', 'Outras cores'); b.textContent = '+';
+  b.addEventListener('click', fn); return b;
+};
+})();
+(function () {
+'use strict';
+/* Símbolos de automação: ladder, P&ID/ISA, pneumática, elétrica (IEC), lógica e GRAFCET.
+   Entram na biblioteca "Formas" (mesmo mecanismo: traços agrupados + rótulos editáveis). */
+var CP = window.CP, A = CP.mathApi, H = A.helpers, PI = Math.PI;
+var arc = H.arc, ell = H.ell, closed = H.closed, headAt = H.headAt, P = H.P, D = H.D;
+function flat(a) { var o = []; (function f(x) { if (Array.isArray(x) && !(x.length && typeof x[0] === 'number') && !(x.length && Array.isArray(x[0]) && typeof x[0][0] === 'number')) x.forEach(f); else if (x) o.push(x); })(a); return o; }
+function def(cat, name, w, h, fn) { A.def(cat, name, w, h, function (ww, hh) { return flat(fn(ww, hh)); }); }
+function qb(p0, c, p2, n) { var o = [], i; n = n || 14; for (i = 0; i <= n; i++) { var t = i / n, u = 1 - t; o.push([u * u * p0[0] + 2 * u * t * c[0] + t * t * p2[0], u * u * p0[1] + 2 * u * t * c[1] + t * t * p2[1]]); } return o; }
+function T(s, x, y, size) { return { txt: s, x: x, y: y, size: size || 20 }; }
+function L() { return { p: Array.prototype.slice.call(arguments) }; }
+function box(x, y, w, h) { return { p: [[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]] }; }
+function circ(cx, cy, r) { return { p: ell(cx, cy, r, r) }; }
+function zig(x0, y0, x1, y1, n, amp) {
+  var o = [[x0, y0]], dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l, i;
+  for (i = 0; i < n * 2; i++) { var t = (i + 0.5) / (n * 2), s = i % 2 ? 1 : -1; o.push([x0 + dx * t + nx * amp * s, y0 + dy * t + ny * amp * s]); }
+  o.push([x1, y1]); return o;
+}
+function tri(a, b, c) { return { p: [a, b, c, a] }; }
+
+/* ---------- Ladder (CLP) ---------- */
+var LD = 'Ladder (CLP)';
+def(LD, 'Contato NA  ─┤ ├─', 170, 90, function (w, h) { return [L([0, h / 2], [w * .4, h / 2]), L([w * .4, h * .15], [w * .4, h * .85]), L([w * .6, h * .15], [w * .6, h * .85]), L([w * .6, h / 2], [w, h / 2]), T('I0.0', w / 2, -4, 20)]; });
+def(LD, 'Contato NF  ─┤/├─', 170, 90, function (w, h) { return [L([0, h / 2], [w * .4, h / 2]), L([w * .4, h * .15], [w * .4, h * .85]), L([w * .6, h * .15], [w * .6, h * .85]), L([w * .6, h / 2], [w, h / 2]), L([w * .33, h * .9], [w * .67, h * .1]), T('I0.1', w / 2, -4, 20)]; });
+def(LD, 'Borda subida ─┤P├─', 170, 90, function (w, h) { return [L([0, h / 2], [w * .4, h / 2]), L([w * .4, h * .15], [w * .4, h * .85]), L([w * .6, h * .15], [w * .6, h * .85]), L([w * .6, h / 2], [w, h / 2]), T('P', w / 2, h / 2 + 7, 20), T('I0.2', w / 2, -4, 20)]; });
+function coil(w, h, letter, tag) {
+  var cx = w / 2, y0 = h * .1, y1 = h * .9, o = [L([0, h / 2], [cx - 15, h / 2]), { p: qb([cx - 6, y0], [cx - 24, h / 2], [cx - 6, y1], 14) }, { p: qb([cx + 6, y0], [cx + 24, h / 2], [cx + 6, y1], 14) }, L([cx + 15, h / 2], [w, h / 2]), T(tag, cx, -4, 20)];
+  if (letter) o.push(T(letter, cx, h / 2 + 7, 20)); return o;
+}
+def(LD, 'Bobina  ─( )─', 170, 90, function (w, h) { return coil(w, h, '', 'Q0.0'); });
+def(LD, 'Bobina Set  ─(S)─', 170, 90, function (w, h) { return coil(w, h, 'S', 'Q0.1'); });
+def(LD, 'Bobina Reset  ─(R)─', 170, 90, function (w, h) { return coil(w, h, 'R', 'Q0.1'); });
+function fb(w, h, name, left, right) {
+  var o = [box(w * .22, 0, w * .56, h), L([0, 0 + h * .25], [w * .22, h * .25]), L([w * .78, h * .25], [w, h * .25]), T(name, w / 2, h * .15, 20)], i;
+  left.forEach(function (s, k) { var y = h * (.25 + k * .3); if (k) o.push(L([0, y], [w * .22, y])); o.push(T(s, w * .22 + 24, y + 6, 15)); });
+  right.forEach(function (s, k) { var y = h * (.25 + k * .3); if (k) o.push(L([w * .78, y], [w, y])); o.push(T(s, w * .78 - 24, y + 6, 15)); });
+  return o;
+}
+def(LD, 'Temporizador TON', 250, 130, function (w, h) { return fb(w, h, 'TON', ['IN', 'PT'], ['Q', 'ET']); });
+def(LD, 'Temporizador TOF', 250, 130, function (w, h) { return fb(w, h, 'TOF', ['IN', 'PT'], ['Q', 'ET']); });
+def(LD, 'Contador CTU', 250, 150, function (w, h) { return fb(w, h, 'CTU', ['CU', 'R', 'PV'], ['Q', 'CV']); });
+def(LD, 'Contador CTD', 250, 150, function (w, h) { return fb(w, h, 'CTD', ['CD', 'LD', 'PV'], ['Q', 'CV']); });
+def(LD, 'Degrau de ladder', 520, 110, function (w, h) { return [L([0, 0], [0, h]), L([w, 0], [w, h]), L([0, h / 2], [w * .3, h / 2]), L([w * .7, h / 2], [w, h / 2]), L([w * .3, h * .2], [w * .3, h * .8]), L([w * .38, h * .2], [w * .38, h * .8]), L([w * .62, h * .5], [w * .7, h * .5]), { p: qb([w * .51, h * .2], [w * .47, h / 2], [w * .51, h * .8], 10) }, { p: qb([w * .55, h * .2], [w * .59, h / 2], [w * .55, h * .8], 10) }, L([w * .38, h / 2], [w * .43, h / 2]), L([w * .6, h / 2], [w * .62, h / 2]), T('I0.0', w * .34, h * .1, 16), T('Q0.0', w * .52, h * .1, 16)]; });
+def(LD, 'Rede de 3 degraus', 520, 330, function (w, h) { var o = [L([0, 0], [0, h]), L([w, 0], [w, h])], i; for (i = 0; i < 3; i++) { var y = 55 + i * 110; o.push(L([0, y], [w * .35, y]), L([w * .65, y], [w, y]), L([w * .35, y - 20], [w * .35, y + 20]), L([w * .41, y - 20], [w * .41, y + 20]), T('I0.' + i, w * .38, y - 28, 15), { p: qb([w * .79, y - 20], [w * .75, y], [w * .79, y + 20], 8) }, { p: qb([w * .82, y - 20], [w * .86, y], [w * .82, y + 20], 8) }, T('Q0.' + i, w * .79, y - 30, 15), L([w * .41, y], [w * .65, y])); } return o; });
+
+/* ---------- P&ID / ISA 5.1 ---------- */
+var PD = 'P&ID / ISA';
+function inst(w, h, kind) {
+  var cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2 - 2, o = [], k = kind;
+  if (k === 'dcs') { o.push(box(cx - r, cy - r, 2 * r, 2 * r), circ(cx, cy, r * .86)); }
+  else if (k === 'plc') { o.push(box(cx - r, cy - r, 2 * r, 2 * r), { p: [[cx, cy - r * .86], [cx + r * .86, cy], [cx, cy + r * .86], [cx - r * .86, cy], [cx, cy - r * .86]] }); }
+  else if (k === 'pc') { var hx = [], a; for (a = 0; a < 6; a++) hx.push([cx + r * Math.cos(a * PI / 3), cy + r * .87 * Math.sin(a * PI / 3)]); o.push({ p: closed(hx) }); }
+  else o.push(circ(cx, cy, r));
+  if (k === 'painel') o.push(L([cx - r, cy], [cx + r, cy]));
+  if (k === 'atras') o.push(D([[[cx - r, cy], [cx + r, cy]]]));
+  o.push(T('FT', cx, cy - 8, 20), T('101', cx, cy + 22, 18));
+  return o;
+}
+def(PD, 'Instrumento de campo', 100, 100, function (w, h) { return inst(w, h, 'campo'); });
+def(PD, 'Instrumento no painel', 100, 100, function (w, h) { return inst(w, h, 'painel'); });
+def(PD, 'Instrumento atrás do painel', 100, 100, function (w, h) { return inst(w, h, 'atras'); });
+def(PD, 'DCS (círculo em quadrado)', 110, 110, function (w, h) { return inst(w, h, 'dcs'); });
+def(PD, 'CLP (losango em quadrado)', 110, 110, function (w, h) { return inst(w, h, 'plc'); });
+def(PD, 'Função de computador', 110, 100, function (w, h) { return inst(w, h, 'pc'); });
+function bow(w, h) { return [tri([0, 0], [w / 2, h / 2], [0, h]), tri([w, 0], [w / 2, h / 2], [w, h])]; }
+function bowt(w, h) { return [{ p: [[0, 0], [w / 2, h / 2], [0, h], [0, 0]] }, { p: [[w, 0], [w / 2, h / 2], [w, h], [w, 0]] }]; }
+def(PD, 'Válvula manual (gaveta)', 130, 70, function (w, h) { return bowt(w, h); });
+def(PD, 'Válvula globo', 130, 70, function (w, h) { return bowt(w, h).concat([circ(w / 2, h / 2, 10)]); });
+def(PD, 'Válvula esfera', 130, 70, function (w, h) { return bowt(w, h).concat([circ(w / 2, h / 2, 14)]); });
+def(PD, 'Válvula borboleta', 130, 70, function (w, h) { return bowt(w, h).concat([L([w * .5, h * .12], [w * .5, h * .88])]); });
+def(PD, 'Válvula de retenção', 130, 70, function (w, h) { return [L([0, h / 2], [w, h / 2]), tri([w * .72, h * .15], [w * .28, h / 2], [w * .72, h * .85]), L([w * .28, h * .15], [w * .28, h * .85])]; });
+def(PD, 'Válvula de controle (pneumática)', 140, 140, function (w, h) { var y = h - 50, cx = w / 2; return [{ p: [[0, y], [cx, y + 25], [0, y + 50], [0, y]] }, { p: [[w, y], [cx, y + 25], [w, y + 50], [w, y]] }, L([cx, y + 25], [cx, 52]), { p: arc(cx, 52, 36, 36, PI, 2 * PI, 20).concat([[cx - 36, 52]]) }, T('FV', cx, 38, 18)]; });
+def(PD, 'Válvula de controle (motorizada)', 140, 140, function (w, h) { var y = h - 50, cx = w / 2; return [{ p: [[0, y], [cx, y + 25], [0, y + 50], [0, y]] }, { p: [[w, y], [cx, y + 25], [w, y + 50], [w, y]] }, L([cx, y + 25], [cx, 52]), circ(cx, 30, 26), T('M', cx, 38, 22)]; });
+def(PD, 'Válvula solenoide', 140, 140, function (w, h) { var y = h - 50, cx = w / 2; return [{ p: [[0, y], [cx, y + 25], [0, y + 50], [0, y]] }, { p: [[w, y], [cx, y + 25], [w, y + 50], [w, y]] }, L([cx, y + 25], [cx, 52]), box(cx - 24, 8, 48, 44), L([cx - 24, 52], [cx + 24, 8]), T('S', cx + 14, 46, 16)]; });
+def(PD, 'Válvula de segurança (PSV)', 120, 150, function (w, h) { var cx = w * .35; return [{ p: [[cx, h], [cx, h * .62]] }, { p: [[cx - 30, h * .62], [cx, h * .62 - 0], [cx + 30, h * .62], [cx, h * .85], [cx - 30, h * .62]] }, L([cx, h * .62], [cx, h * .3]), { p: zig(cx, h * .3, cx, 10, 3, 14) }, L([cx, h * .85], [w, h * .85])]; });
+def(PD, 'Válvula 3 vias', 140, 110, function (w, h) { return [{ p: [[0, 10], [w / 2, 45], [0, 80], [0, 10]] }, { p: [[w, 10], [w / 2, 45], [w, 80], [w, 10]] }, { p: [[w * .25, 100], [w / 2, 45], [w * .75, 100], [w * .25, 100]] }]; });
+def(PD, 'Bomba centrífuga', 150, 130, function (w, h) { var cx = 60, cy = 72, r = 46; return [circ(cx, cy, r), L([0, cy], [cx - r, cy]), L([cx, cy - r], [cx, 8], [w, 8]), tri([cx - 24, cy + 26], [cx + 24, cy + 26], [cx, cy - 22])]; });
+def(PD, 'Bomba de deslocamento positivo', 150, 130, function (w, h) { var cx = 60, cy = 72, r = 46; return [circ(cx, cy, r), L([0, cy], [cx - r, cy]), L([cx, cy - r], [cx, 8], [w, 8]), circ(cx, cy, 16), L([cx - 16, cy], [cx + 16, cy])]; });
+def(PD, 'Motor elétrico', 110, 110, function (w, h) { return [circ(w / 2, h / 2, w / 2 - 2), T('M', w / 2, h / 2 + 9, 30)]; });
+def(PD, 'Ventilador / soprador', 120, 120, function (w, h) { var c = w / 2, r = c - 2, o = [circ(c, c, r)], i; for (i = 0; i < 3; i++) { var a = -PI / 2 + i * 2 * PI / 3; o.push({ p: [[c, c], [c + r * .8 * Math.cos(a), c + r * .8 * Math.sin(a)]] }); } return o; });
+def(PD, 'Compressor', 140, 120, function (w, h) { var cx = w / 2, cy = h / 2, r = 46; return [circ(cx, cy, r), L([cx - 32, cy - 32], [cx + 40, cy - 14]), L([cx - 32, cy + 32], [cx + 40, cy + 14]), L([0, cy], [cx - r, cy]), L([cx + r, cy], [w, cy])]; });
+def(PD, 'Tanque vertical', 160, 240, function (w, h) { var r = 28; return [{ p: [[0, r], [0, h - r]] }, { p: arc(w / 2, r, w / 2, r, PI, 2 * PI, 20) }, { p: [[w, r], [w, h - r]] }, { p: arc(w / 2, h - r, w / 2, r, 0, PI, 20) }, T('TK-101', w / 2, h / 2, 20)]; });
+def(PD, 'Vaso horizontal', 280, 130, function (w, h) { var r = h / 2; return [{ p: [[r, 0], [w - r, 0]] }, { p: [[r, h], [w - r, h]] }, { p: arc(r, r, r * .7, r, .5 * PI, 1.5 * PI, 14) }, { p: arc(w - r, r, r * .7, r, -.5 * PI, .5 * PI, 14) }, T('V-101', w / 2, h / 2 + 6, 20)]; });
+def(PD, 'Tanque com agitador', 170, 250, function (w, h) { var cx = w / 2; return [box(0, 40, w, h - 70), { p: arc(cx, h - 30, w / 2, 30, 0, PI, 18) }, L([cx, 0], [cx, 150]), L([cx - 40, 150], [cx + 40, 150]), L([cx - 40, 130], [cx - 40, 170]), L([cx + 40, 130], [cx + 40, 170]), circ(cx, 14, 14), T('M', cx, 20, 16)]; });
+def(PD, 'Trocador de calor', 200, 110, function (w, h) { var cy = h / 2; return [circ(w / 2, cy, 50), { p: zig(w / 2 - 50, cy, w / 2 + 50, cy, 3, 22) }, L([0, cy], [w / 2 - 50, cy]), L([w / 2 + 50, cy], [w, cy])]; });
+def(PD, 'Filtro em Y', 130, 90, function (w, h) { return [L([0, 30], [w, 30]), L([w * .45, 30], [w * .75, 80]), L([w * .65, 30], [w * .95, 80]), L([w * .75, 80], [w * .95, 80])]; });
+def(PD, 'Linha de sinal elétrico', 260, 40, function (w, h) { return D([[[0, h / 2], [w, h / 2]]]); });
+def(PD, 'Linha de sinal pneumático', 260, 40, function (w, h) { var o = [L([0, h / 2], [w, h / 2])], x; for (x = 30; x < w - 10; x += 40) o.push(L([x, h * .15], [x + 12, h * .85])); return o; });
+def(PD, 'Linha de processo (fluxo)', 260, 50, function (w, h) { return [L([0, h / 2], [w, h / 2]), { p: headAt([w, h / 2], [w - 30, h / 2], 18, .45) }]; });
+
+/* ---------- Pneumática / hidráulica (ISO 1219) ---------- */
+var PN = 'Pneumática';
+def(PN, 'Cilindro dupla ação', 300, 100, function (w, h) { var x0 = 40, x1 = w - 90, py = 50; return [box(x0, 20, x1 - x0, 60), L([x0 + 120, 20], [x0 + 120, 80]), L([x0 + 120, 50], [w, 50]), L([x0 + 30, 20], [x0 + 30, 0]), L([x1 - 30, 20], [x1 - 30, 0]), T('A', x0 + 30, -6, 16), T('B', x1 - 30, -6, 16)]; });
+def(PN, 'Cilindro simples ação (mola)', 300, 100, function (w, h) { var x0 = 40, x1 = w - 90; return [box(x0, 20, x1 - x0, 60), L([x0 + 70, 20], [x0 + 70, 80]), L([x0 + 70, 50], [w, 50]), { p: zig(x0 + 70, 50, x1, 50, 4, 14) }, L([x0 + 20, 20], [x0 + 20, 0])]; });
+function vbox(x, y, s) { return box(x, y, s, s); }
+def(PN, 'Válvula 3/2 solenoide + mola', 280, 190, function (w, h) { var s = 90, x = 50, y = 50, o = [vbox(x, y, s), vbox(x + s, y, s)];
+  o.push(L([x + s * .35, y + s - 6], [x + s * .35, y + 6]), { p: headAt([x + s * .35, y + 6], [x + s * .35, y + 30], 12, .45) });
+  o.push(L([x + s + s * .35, y + 6], [x + s + s * .35, y + s - 6]), { p: headAt([x + s + s * .35, y + s - 6], [x + s + s * .35, y + s - 30], 12, .45) });
+  o.push(L([x + s * .35, y + s], [x + s * .35, y + s + 24]), L([x + s * 1.35, y + s], [x + s * 1.35, y + s + 24]), L([x + s * .35, y], [x + s * .35, y - 24]), L([x + s * .8, y + s], [x + s * .8, y + s + 24]),
+    L([x - 40, y + s / 2], [x, y + s / 2]), box(x - 70, y + s / 2 - 25, 30, 50), L([x - 70, y + s / 2 + 25], [x - 40, y + s / 2 - 25]), { p: zig(x + 2 * s, y + s / 2, x + 2 * s + 40, y + s / 2, 3, 10) },
+    T('2', x + s * .35, y - 30, 16), T('1', x + s * .35, y + s + 42, 16), T('3', x + s * 1.35, y + s + 42, 16)); return o; });
+def(PN, 'Válvula 5/2 duplo piloto', 340, 190, function (w, h) { var s = 100, x = 70, y = 50, o = [vbox(x, y, s), vbox(x + s, y, s)], k = [.2, .5, .8], i;
+  o.push(L([x + 50, y + s - 6], [x + 22, y + 6]), { p: headAt([x + 22, y + 6], [x + 38, y + 36], 12, .45) }, L([x + 78, y + 6], [x + 78, y + s - 6]), { p: headAt([x + 78, y + s - 6], [x + 78, y + s - 36], 12, .45) });
+  o.push(L([x + s + 50, y + s - 6], [x + s + 78, y + 6]), { p: headAt([x + s + 78, y + 6], [x + s + 62, y + 36], 12, .45) }, L([x + s + 22, y + 6], [x + s + 22, y + s - 6]), { p: headAt([x + s + 22, y + s - 6], [x + s + 22, y + s - 36], 12, .45) });
+  o.push(L([x - 30, y + s / 2], [x, y + s / 2]), box(x - 60, y + s / 2 - 22, 30, 44), L([x + 2 * s, y + s / 2], [x + 2 * s + 30, y + s / 2]), box(x + 2 * s + 30, y + s / 2 - 22, 30, 44),
+    L([x + 22, y], [x + 22, y - 24]), L([x + 178, y], [x + 178, y - 24]), L([x + 22, y + s], [x + 22, y + s + 24]), L([x + 100, y + s], [x + 100, y + s + 24]), L([x + 178, y + s], [x + 178, y + s + 24]),
+    T('4', x + 22, y - 30, 16), T('2', x + 178, y - 30, 16), T('5', x + 22, y + s + 42, 16), T('1', x + 100, y + s + 42, 16), T('3', x + 178, y + s + 42, 16)); return o; });
+def(PN, 'Válvula 2/2 (passagem)', 190, 170, function (w, h) { var s = 90, x = 50, y = 40; return [vbox(x, y, s), L([x + 45, y + 6], [x + 45, y + s - 6]), { p: headAt([x + 45, y + s - 6], [x + 45, y + s - 36], 12, .45) }, L([x + 45, y], [x + 45, y - 24]), L([x + 45, y + s], [x + 45, y + s + 24]), L([x - 40, y + s / 2], [x, y + s / 2]), box(x - 70, y + s / 2 - 22, 30, 44), L([x + s, y + s / 2], [x + s + 40, y + s / 2]), { p: zig(x + s, y + s / 2, x + s + 40, y + s / 2, 3, 10) }]; });
+def(PN, 'Válvula reguladora de fluxo', 160, 100, function (w, h) { return [circ(w / 2, h / 2, 34), L([0, h / 2], [w / 2 - 34, h / 2]), L([w / 2 + 34, h / 2], [w, h / 2]), L([w / 2 - 40, h / 2 + 40], [w / 2 + 40, h / 2 - 40]), { p: headAt([w / 2 + 40, h / 2 - 40], [w / 2 + 20, h / 2 - 20], 10, .5) }]; });
+def(PN, 'Fonte de ar comprimido', 110, 110, function (w, h) { return [tri([w / 2, 8], [w - 8, h - 8], [8, h - 8]), L([w / 2, h - 8], [w / 2, h])]; });
+def(PN, 'Escape / silenciador', 90, 110, function (w, h) { return [L([w / 2, 0], [w / 2, 42]), tri([8, 42], [w - 8, 42], [w / 2, 100])]; });
+def(PN, 'Compressor pneumático', 130, 130, function (w, h) { var c = w / 2; return [circ(c, c, c - 4), L([c - 36, c - 30], [c + 36, c]), L([c - 36, c + 30], [c + 36, c]), L([c, 0], [c, 0.1])]; });
+def(PN, 'Unidade FRL', 340, 130, function (w, h) { var y = 60; return [L([0, y], [40, y]), { p: [[40, y], [70, y - 30], [100, y], [70, y + 30], [40, y]] }, L([70, y - 30], [70, y + 30]), L([100, y], [130, y]), { p: [[130, y], [160, y - 30], [190, y], [160, y + 30], [130, y]] }, L([160, y + 10], [160, y - 10]), L([190, y], [220, y]), { p: [[220, y], [250, y - 30], [280, y], [250, y + 30], [220, y]] }, circ(250, y, 6), L([280, y], [w, y]), T('F', 70, 112, 16), T('R', 160, 112, 16), T('L', 250, 112, 16)]; });
+
+/* ---------- Elétrica (IEC 60617) ---------- */
+var EL = 'Elétrica (IEC)';
+def(EL, 'Contato NA (aux.)', 90, 130, function (w, h) { return [L([w / 2, 0], [w / 2, h * .25]), L([w / 2, h * .75], [w / 2, h]), L([w / 2, h * .75], [w * .85, h * .3]), T('13', w + 8, h * .2, 15), T('14', w + 8, h * .95, 15)]; });
+def(EL, 'Contato NF (aux.)', 90, 130, function (w, h) { return [L([w / 2, 0], [w / 2, h * .25]), L([w / 2, h * .75], [w / 2, h]), L([w / 2, h * .75], [w * .85, h * .3]), L([w * .4, h * .35], [w * .8, h * .35]), T('11', w + 8, h * .2, 15), T('12', w + 8, h * .95, 15)]; });
+def(EL, 'Botão NA', 120, 140, function (w, h) { return [L([w / 2, 0], [w / 2, h * .2]), L([w / 2, h * .75], [w / 2, h]), L([w / 2, h * .75], [w * .8, h * .3]), L([w * .45, h * .1], [w * .45, h * .05]), D([[[w * .8, h * .5], [w * .8, h * .08]]]), L([w * .6, h * .08], [w * 1.0, h * .08])]; });
+def(EL, 'Botão NF', 120, 140, function (w, h) { return [L([w / 2, 0], [w / 2, h * .2]), L([w / 2, h * .75], [w / 2, h]), L([w / 2, h * .75], [w * .8, h * .3]), L([w * .4, h * .35], [w * .75, h * .35]), L([w * .6, h * .08], [w * 1.0, h * .08])]; });
+def(EL, 'Botão de emergência', 120, 140, function (w, h) { return [L([w / 2, 0], [w / 2, h * .2]), L([w / 2, h * .75], [w / 2, h]), L([w / 2, h * .75], [w * .8, h * .3]), L([w * .4, h * .35], [w * .75, h * .35]), { p: arc(w * .85, h * .05, 24, 18, PI, 2 * PI, 10) }]; });
+def(EL, 'Fim de curso', 120, 140, function (w, h) { return [L([w / 2, 0], [w / 2, h * .25]), L([w / 2, h * .75], [w / 2, h]), L([w / 2, h * .75], [w * .85, h * .3]), circ(w * .98, h * .15, 8)]; });
+def(EL, 'Bobina de contator', 100, 150, function (w, h) { return [box(0, 35, w, 80), L([w / 2, 0], [w / 2, 35]), L([w / 2, 115], [w / 2, h]), T('A1', w + 24, 20, 15), T('A2', w + 24, h, 15), T('KM1', w / 2, 82, 20)]; });
+def(EL, 'Contator 3 polos (potência)', 230, 190, function (w, h) { var o = [], i; for (i = 0; i < 3; i++) { var x = 30 + i * 80; o.push(L([x, 0], [x, 50]), L([x, 120], [x, h]), L([x, 120], [x + 28, 60]), T(String(2 * i + 1), x - 16, 20, 14), T(String(2 * i + 2), x - 18, h - 4, 14)); } o.push(D([[[30, 90], [190, 90]]])); return o; });
+def(EL, 'Disjuntor 3 polos', 230, 190, function (w, h) { var o = [], i; for (i = 0; i < 3; i++) { var x = 30 + i * 80; o.push(L([x, 0], [x, 50]), L([x, 120], [x, h]), L([x, 120], [x + 28, 60]), L([x - 8, 52], [x + 8, 68]), L([x + 8, 52], [x - 8, 68])); } o.push(D([[[30, 90], [190, 90]]])); return o; });
+def(EL, 'Fusível', 90, 170, function (w, h) { return [box(w * .3, 30, w * .4, h - 60), L([w / 2, 0], [w / 2, h]), T('F1', w + 6, h / 2, 18)]; });
+def(EL, 'Relé térmico', 100, 170, function (w, h) { return [box(0, 35, w, 100), L([w / 2, 0], [w / 2, 35]), L([w / 2, 135], [w / 2, h]), { p: zig(w / 2, 50, w / 2, 125, 3, 14) }, T('F2', w + 24, h / 2, 18)]; });
+def(EL, 'Motor trifásico', 130, 130, function (w, h) { return [circ(w / 2, h / 2, w / 2 - 2), T('M', w / 2, h / 2 + 2, 28), T('3~', w / 2, h / 2 + 34, 20)]; });
+def(EL, 'Transformador', 220, 150, function (w, h) { var o = [], i; for (i = 0; i < 3; i++) { o.push({ p: arc(60 + i * 34, 75, 22, 24, .5 * PI, 1.5 * PI, 10).reverse() }); } return [{ p: arc(80, 75, 40, 40, 0, 2 * PI, 40) }, { p: arc(140, 75, 40, 40, 0, 2 * PI, 40) }, L([0, 75], [40, 75]), L([180, 75], [w, 75])]; });
+def(EL, 'Inversor de frequência', 200, 160, function (w, h) { return [box(40, 20, 120, 120), L([0, 50], [40, 50]), L([160, 50], [w, 50]), L([40, 20], [160, 140]), T('~', 78, 60, 24), T('=', 124, 118, 22), T('VFD', 100, 40, 15)]; });
+def(EL, 'CLP (módulo)', 220, 190, function (w, h) { var o = [box(50, 0, 120, h), T('CLP', w / 2, 36, 22), T('DI', 85, 76, 15), T('DO', 135, 76, 15)], i; for (i = 0; i < 4; i++) { var y = 98 + i * 22; o.push(L([20, y], [50, y]), L([170, y], [200, y])); } o.push(T('I0.0..', 6, 90, 12), T('Q0.0..', 214, 90, 12)); return o; });
+def(EL, 'Fonte 24 Vcc', 140, 130, function (w, h) { return [box(20, 20, 100, 90), L([20, 20], [120, 110]), T('~', 48, 54, 22), T('=', 96, 100, 22), L([50, 110], [50, h]), L([90, 110], [90, h]), T('+', 50, h + 20, 16), T('−', 90, h + 20, 16)]; });
+def(EL, 'Sensor indutivo (NPN/PNP)', 160, 120, function (w, h) { var o = [box(20, 15, 100, 90), { p: [[70, 30], [100, 60], [70, 90], [40, 60], [70, 30]] }, L([120, 60], [w, 60])]; return o; });
+def(EL, 'Sensor fotoelétrico', 160, 120, function (w, h) { return [box(20, 15, 100, 90), { p: [[40, 40], [100, 40], [70, 85], [40, 40]] }, L([120, 60], [w, 60]), { p: headAt([46, 22], [30, 6], 10, .5) }]; });
+def(EL, 'Solenoide', 90, 140, function (w, h) { return [box(0, 35, w, 70), L([w / 2, 0], [w / 2, 35]), L([w / 2, 105], [w / 2, h]), L([0, 105], [w, 35])]; });
+def(EL, 'Borne / terminal', 80, 80, function (w, h) { return [circ(w / 2, h / 2, 14), L([w / 2, 0], [w / 2, h / 2 - 14]), L([w / 2, h / 2 + 14], [w / 2, h])]; });
+def(EL, 'Chave seccionadora', 110, 150, function (w, h) { return [L([w / 2, 0], [w / 2, h * .25]), L([w / 2, h * .75], [w / 2, h]), L([w / 2, h * .75], [w * .85, h * .28]), L([w * .62, h * .5], [w * 1.0, h * .5])]; });
+
+/* ---------- Lógica e GRAFCET ---------- */
+var LG = 'Lógica / GRAFCET';
+function gate(kind) {
+  return function (w, h) {
+    var o = [], bx = w * .3, ex = w * .78, inv = kind === 'NAND' || kind === 'NOR' || kind === 'NOT' || kind === 'XNOR', orl = kind === 'OR' || kind === 'NOR' || kind === 'XOR' || kind === 'XNOR';
+    var x2 = inv ? ex + 12 : ex;
+    if (kind === 'AND' || kind === 'NAND') o.push({ p: [[bx, 0], [w * .5, 0]].concat(arc(w * .5, h / 2, ex - w * .5, h / 2, -PI / 2, PI / 2, 18)).concat([[bx, h], [bx, 0]]) });
+    else if (orl) o.push({ p: qb([bx, 0], [w * .58, 0], [ex, h / 2]).concat(qb([ex, h / 2], [w * .58, h], [bx, h]).slice(1)).concat(qb([bx, h], [bx + 24, h / 2], [bx, 0]).slice(1)) });
+    else o.push(tri([bx, 0], [bx, h], [ex, h / 2]));
+    if (kind === 'XOR' || kind === 'XNOR') o.push({ p: qb([bx - 14, h], [bx + 10, h / 2], [bx - 14, 0]) });
+    if (inv) o.push(circ(ex + 6, h / 2, 6));
+    var one = (kind === 'NOT' || kind === 'BUF'), ins = one ? [h / 2] : [h * .3, h * .7];
+    ins.forEach(function (y) { o.push(L([0, y], [one ? bx : (orl ? bx + 10 : bx), y])); });
+    o.push(L([x2 + (inv ? 6 : 0), h / 2], [w, h / 2]));
+    return o;
+  };
+}
+['AND', 'OR', 'NOT', 'NAND', 'NOR', 'XOR', 'BUF'].forEach(function (k) { def(LG, 'Porta ' + (k === 'BUF' ? 'buffer' : k), 190, 100, gate(k)); });
+def(LG, 'Flip-flop SR', 190, 150, function (w, h) { return [box(40, 0, 110, h), L([0, 35], [40, 35]), L([0, 115], [40, 115]), L([150, 35], [w, 35]), L([150, 115], [w, 115]), T('S', 62, 42, 16), T('R', 62, 122, 16), T('Q', 130, 42, 16), T('Q̅', 130, 122, 16)]; });
+def(LG, 'Flip-flop D', 190, 150, function (w, h) { return [box(40, 0, 110, h), L([0, 35], [40, 35]), L([0, 115], [40, 115]), L([150, 35], [w, 35]), L([150, 115], [w, 115]), T('D', 62, 42, 16), T('>', 60, 122, 16), T('Q', 130, 42, 16), T('Q̅', 130, 122, 16)]; });
+def(LG, 'Bloco de função (FBD)', 250, 130, function (w, h) { return fb(w, h, 'FB', ['IN1', 'IN2'], ['OUT', 'ENO']); });
+def(LG, 'Bloco PID', 260, 190, function (w, h) { var o = [box(55, 0, 150, h), T('PID', w / 2, 26, 22)], l = ['SP', 'PV', 'MAN'], r = ['OUT', 'ERR'], i; l.forEach(function (s, k) { var y = 60 + k * 40; o.push(L([0, y], [55, y]), T(s, 80, y + 6, 15)); }); r.forEach(function (s, k) { var y = 60 + k * 40; o.push(L([205, y], [w, y]), T(s, 178, y + 6, 15)); }); return o; });
+def(LG, 'GRAFCET: etapa inicial', 100, 140, function (w, h) { return [box(20, 30, 60, 60), box(12, 22, 76, 76), L([50, 0], [50, 22]), L([50, 98], [50, h]), T('0', 50, 72, 24)]; });
+def(LG, 'GRAFCET: etapa', 100, 140, function (w, h) { return [box(20, 30, 60, 60), L([50, 0], [50, 30]), L([50, 90], [50, h]), T('1', 50, 72, 24)]; });
+def(LG, 'GRAFCET: etapa + ação', 260, 140, function (w, h) { return [box(20, 30, 60, 60), L([50, 0], [50, 30]), L([50, 90], [50, h]), L([80, 60], [110, 60]), box(110, 40, 140, 40), T('Q0.0', 180, 68, 18), T('1', 50, 72, 24)]; });
+def(LG, 'GRAFCET: transição', 200, 100, function (w, h) { return [L([50, 0], [50, h]), L([32, h / 2], [68, h / 2]), T('I0.0', 130, h / 2 + 6, 18)]; });
+def(LG, 'GRAFCET: divergência OU', 240, 70, function (w, h) { return [L([20, 30], [w - 20, 30]), L([w / 2, 0], [w / 2, 30]), L([20, 30], [20, h]), L([w - 20, 30], [w - 20, h])]; });
+def(LG, 'GRAFCET: divergência E', 240, 70, function (w, h) { return [L([20, 26], [w - 20, 26]), L([20, 34], [w - 20, 34]), L([w / 2, 0], [w / 2, 26]), L([20, 34], [20, h]), L([w - 20, 34], [w - 20, h])]; });
+})();
+(function () {
+'use strict';
+/* Conectores que acompanham os símbolos + grade magnética.
+   Um conector é um traço com {cn:{a:grupoA, b:grupoB, st:'o'|'s', ar:bool}}; a rota é recalculada
+   antes de cada redesenho a partir da caixa dos dois grupos (por isso mover, escalar, desfazer e
+   refazer mantêm tudo ligado). */
+var CP = window.CP, $ = CP.$, S = CP.S, E = CP.engine, A = CP.mathApi;
+function note() { return CP.cur(); }
+function sc() { return E.scale() || 1; }
+
+function route(a, b, st) {
+  var ac = { x: (a.x0 + a.x1) / 2, y: (a.y0 + a.y1) / 2 }, bc = { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 };
+  var hsep = a.x1 < b.x0 - 4 || b.x1 < a.x0 - 4, vsep = a.y1 < b.y0 - 4 || b.y1 < a.y0 - 4;
+  var horiz = hsep && (!vsep || Math.abs(bc.x - ac.x) >= Math.abs(bc.y - ac.y)), p0, p1;
+  if (!hsep && !vsep) horiz = Math.abs(bc.x - ac.x) >= Math.abs(bc.y - ac.y);
+  if (horiz) { var r = bc.x >= ac.x; p0 = [r ? a.x1 : a.x0, ac.y]; p1 = [r ? b.x0 : b.x1, bc.y]; }
+  else { var dn = bc.y >= ac.y; p0 = [ac.x, dn ? a.y1 : a.y0]; p1 = [bc.x, dn ? b.y0 : b.y1]; }
+  function near(bx, side, pt, axis) { var L = bx.e && bx.e[side]; if (!L || !L.length) return pt; var lo = 1e9, hi = -1e9; L.forEach(function (q) { lo = Math.min(lo, q[axis]); hi = Math.max(hi, q[axis]); }); var tg = (lo + hi) / 2, best = pt, bd = 1e9; L.forEach(function (q) { var d = Math.abs(q[axis] - tg); if (d < bd) { bd = d; best = q; } }); return best; }
+  if (horiz) { p0 = near(a, bc.x >= ac.x ? 'r' : 'l', p0, 1); p1 = near(b, bc.x >= ac.x ? 'l' : 'r', p1, 1); } else { p0 = near(a, bc.y >= ac.y ? 'b' : 't', p0, 0); p1 = near(b, bc.y >= ac.y ? 't' : 'b', p1, 0); }
+  if (st === 's') return [p0, p1];
+  if (horiz) { if (Math.abs(p0[1] - p1[1]) < 3) return [p0, [p1[0], p0[1]]]; var mx = (p0[0] + p1[0]) / 2; return [p0, [mx, p0[1]], [mx, p1[1]], p1]; }
+  if (Math.abs(p0[0] - p1[0]) < 3) return [p0, [p0[0], p1[1]]];
+  var my = (p0[1] + p1[1]) / 2; return [p0, [p0[0], my], [p1[0], my], p1];
+}
+function dens(pts) {
+  var o = [pts[0]], i;
+  for (i = 1; i < pts.length; i++) { var a = pts[i - 1], b = pts[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]), k = Math.max(1, Math.ceil(L / 5)); for (var j = 1; j <= k; j++) o.push([a[0] + (b[0] - a[0]) * j / k, a[1] + (b[1] - a[1]) * j / k]); }
+  return o;
+}
+function build(pts, ar) {
+  if (ar && pts.length > 1) { var tip = pts[pts.length - 1], hd = A.helpers.headAt(tip, pts[pts.length - 2], 18, .45); pts = pts.concat([hd[0], tip, hd[2]]); }
+  var d = []; dens(pts).forEach(function (q) { d.push(Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10, 60); }); return d;
+}
+function boxes(n, want) {
+  var bb = {};
+  n.strokes.forEach(function (s) {
+    if (s.cn || !s.g || !want[s.g]) return;
+    var b = bb[s.g] || (bb[s.g] = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 });
+    for (var i = 0; i < s.d.length; i += 3) { b.x0 = Math.min(b.x0, s.d[i]); b.x1 = Math.max(b.x1, s.d[i]); b.y0 = Math.min(b.y0, s.d[i + 1]); b.y1 = Math.max(b.y1, s.d[i + 1]); }
+  });
+  /* pontos que tocam cada lado da caixa: a ligação encaixa no terminal real do símbolo (ponta do fio) */
+  Object.keys(bb).forEach(function (g) { bb[g].e = { l: [], r: [], t: [], b: [] }; });
+  n.strokes.forEach(function (s) {
+    if (s.cn || !s.g || !bb[s.g]) return; var b = bb[s.g], tol = 3;
+    for (var i = 0; i < s.d.length; i += 3) { var x = s.d[i], y = s.d[i + 1]; if (x <= b.x0 + tol) b.e.l.push([x, y]); if (x >= b.x1 - tol) b.e.r.push([x, y]); if (y <= b.y0 + tol) b.e.t.push([x, y]); if (y >= b.y1 - tol) b.e.b.push([x, y]); }
+  });
+  return bb;
+}
+function update(n) {
+  n = n || note(); if (!n) return;
+  var cs = n.strokes.filter(function (s) { return s.cn; }); if (!cs.length) return;
+  var want = {}; cs.forEach(function (s) { want[s.cn.a] = 1; want[s.cn.b] = 1; });
+  var bb = boxes(n, want);
+  cs.forEach(function (s) { var a = bb[s.cn.a], b = bb[s.cn.b]; if (!a || !b) return; s.d = build(route(a, b, s.cn.st), s.cn.ar); });
+}
+CP.hooks.preRedraw = update;
+
+/* ---------- modo conectar ---------- */
+var bar = null, active = false, first = null, opt = { st: 'o', ar: true };
+function groupOf(s) { if (!s.g) s.g = CP.uid(); return s.g; }
+function pickAt(q) {
+  var n = note(), k = sc(), rs = [10, 20, 34], i, j;
+  for (i = 0; i < rs.length; i++) for (j = n.strokes.length - 1; j >= 0; j--) { var s = n.strokes[j]; if (s.cn || s.k === 'h') continue; if (CP.layers && !CP.layers.editable(s)) continue; if (E.distToStroke(s, q.x, q.y, rs[i] / k)) return s; }
+  return null;
+}
+function connect(ga, gb) {
+  var n = note(), bb = boxes(n, (function () { var o = {}; o[ga] = 1; o[gb] = 1; return o; })());
+  if (!bb[ga] || !bb[gb] || ga === gb) { CP.toast('Escolha dois símbolos diferentes.'); return false; }
+  var cn = { a: ga, b: gb, st: opt.st, ar: opt.ar };
+  var s = A.mkStroke(route(bb[ga], bb[gb], opt.st), { c: S.pen.c, w: S.pen.w }); s.cn = cn; s.d = build(route(bb[ga], bb[gb], opt.st), opt.ar);
+  n.strokes.push(s); E.push({ t: 'add', s: s }); E.redraw(); CP.queueSave(n); return true;
+}
+function onDown(e) {
+  if (!active) return;
+  var sheet = $('#sheet'); if (!sheet || !sheet.contains(e.target)) return;
+  e.preventDefault(); e.stopPropagation();
+  var s = pickAt(E.toLogical(e));
+  if (!s) { CP.toast('Toque em cima de um símbolo ou de um traço.'); return; }
+  var g = groupOf(s);
+  if (!first) { first = g; setMsg('Agora toque no símbolo de destino'); CP.toast('Origem escolhida.'); return; }
+  if (connect(first, g)) { CP.toast('Conectado. Mova os símbolos: a ligação acompanha.'); }
+  first = null; setMsg('Toque no símbolo de origem');
+}
+function setMsg(t) { if (bar) bar.querySelector('.cmsg').textContent = t; }
+function stop() { active = false; first = null; if (bar) { bar.remove(); bar = null; } document.removeEventListener('pointerdown', onDown, true); }
+function startConnect() {
+  if (active) return; active = true; first = null;
+  bar = document.createElement('div'); bar.className = 'connbar';
+  bar.innerHTML = '<span class="cmsg">Toque no símbolo de origem</span>' +
+    '<button type="button" data-k="o">Em ângulo</button><button type="button" data-k="s">Reta</button><button type="button" data-k="ar">Seta</button><button type="button" class="ok" data-k="x">Concluir</button>';
+  document.body.appendChild(bar);
+  function sync() { CP.$$('[data-k]', bar).forEach(function (b) { var k = b.getAttribute('data-k'); b.classList.toggle('on', (k === 'o' && opt.st === 'o') || (k === 's' && opt.st === 's') || (k === 'ar' && opt.ar)); }); }
+  CP.$$('[data-k]', bar).forEach(function (b) { b.addEventListener('pointerdown', function (e) { e.stopPropagation(); }); b.addEventListener('click', function () { var k = b.getAttribute('data-k'); if (k === 'x') { stop(); return; } if (k === 'ar') opt.ar = !opt.ar; else opt.st = k; sync(); }); });
+  sync(); document.addEventListener('pointerdown', onDown, true);
+}
+CP.conn = { start: startConnect, stop: stop, update: update, route: route, active: function () { return active; } };
+
+/* ---------- grade magnética ---------- */
+CP.snapMove = function (snap, tsn, box) {
+  if (!S.gridSnap || !box) return;
+  var G = 20, gx = 1e9, gy = 1e9; snap.forEach(function (it) { for (var j = 0; j < it.s.d.length; j += 3) { gx = Math.min(gx, it.s.d[j]); gy = Math.min(gy, it.s.d[j + 1]); } });
+  var dx = Math.round(gx / G) * G - gx, dy = Math.round(gy / G) * G - gy;
+  if (!dx && !dy) return;
+  snap.forEach(function (it) { for (var i = 0; i < it.s.d.length; i += 3) { it.s.d[i] = Math.round((it.s.d[i] + dx) * 10) / 10; it.s.d[i + 1] = Math.round((it.s.d[i + 1] + dy) * 10) / 10; } });
+  tsn.forEach(function (o) { o.t.x = Math.round(o.t.x + dx); o.t.y = Math.round(o.t.y + dy); });
+};
+CP.toggleGridSnap = function () { S.gridSnap = !S.gridSnap; CP.persistMeta(); CP.toast(S.gridSnap ? 'Grade magnética ligada: os símbolos encaixam de 20 em 20.' : 'Grade magnética desligada.'); };
+})();
+(function () {
+'use strict';
+/* Marcações de engenharia: balões numerados, nuvem de revisão, carimbos e medição em escala. */
+var CP = window.CP, $ = CP.$, S = CP.S, E = CP.engine, A = CP.mathApi, H = A.helpers, PI = Math.PI;
+function note() { return CP.cur(); }
+function sc() { return E.scale() || 1; }
+function esc(s) { return CP.esc(s); }
+function ctext(txt, cx, base, size, c) { var ww = Math.max(40, Math.round(String(txt).length * size * 0.62) + 16); return A.mkText(txt, cx - ww / 2, base - size * 0.8, size, c, { w: ww }); }
+function qb(p0, c, p2, n) { var o = [], i; n = n || 8; for (i = 0; i <= n; i++) { var t = i / n, u = 1 - t; o.push([u * u * p0[0] + 2 * u * t * c[0] + t * t * p2[0], u * u * p0[1] + 2 * u * t * c[1] + t * t * p2[1]]); } return o; }
+function two(n) { return n < 10 ? '0' + n : '' + n; }
+function stamp() { var d = new Date(); return two(d.getDate()) + '/' + two(d.getMonth() + 1) + '/' + d.getFullYear(); }
+function stampT() { var d = new Date(); return stamp() + ' ' + two(d.getHours()) + ':' + two(d.getMinutes()); }
+
+/* grupo adicionado sem trocar de ferramenta (usado nas medições) */
+function addGroup(items, texts) {
+  var n = note(); if (!n) return; var g = CP.uid(), subs = [];
+  items.forEach(function (it) { var s = A.mkStroke(it.p, { c: it.c || S.pen.c, w: it.w || S.pen.w }); s.g = g; n.strokes.push(s); subs.push({ t: 'add', s: s }); });
+  (texts || []).forEach(function (tx) { tx.g = g; n.texts.push(tx); subs.push({ t: 'tadd', tx: tx }); });
+  E.push({ t: 'multi', list: subs }); if (E.placeTexts) E.placeTexts(); E.redraw(); CP.queueSave(n);
+}
+
+/* ---------- balões ---------- */
+function balloon(leader) {
+  var n = note(); if (!n) return; n.bal = (n.bal || 0) + 1;
+  var r = 30, cx = r + (leader ? 60 : 0), cy = r, items = [{ p: H.ell(cx, cy, r, r) }];
+  if (leader) { items.push({ p: [[cx - r * .7, cy + r * .7], [4, cy + r + 56]] }, { p: H.headAt([4, cy + r + 56], [cx - r * .7, cy + r * .7], 18, .45) }); }
+  A.placeAt(items, [ctext(String(n.bal), cx, cy + 9, 28, S.pen.c)]);
+  CP.toast('Balão ' + n.bal + ' inserido. O próximo será ' + (n.bal + 1) + '.');
+}
+function balloonReset() { var n = note(); if (n) { n.bal = 0; CP.queueSave(n); CP.toast('Contagem dos balões zerada.'); } }
+
+/* ---------- nuvem de revisão ---------- */
+function cloud(w, h) {
+  var pts = [], step = 34, i, k, x, y, rr = 11;
+  function edge(x0, y0, x1, y1, nx, ny) {
+    var L = Math.hypot(x1 - x0, y1 - y0), m = Math.max(2, Math.round(L / step));
+    for (i = 0; i < m; i++) { var a = [x0 + (x1 - x0) * i / m, y0 + (y1 - y0) * i / m], b = [x0 + (x1 - x0) * (i + 1) / m, y0 + (y1 - y0) * (i + 1) / m], c = [(a[0] + b[0]) / 2 + nx * rr * 1.7, (a[1] + b[1]) / 2 + ny * rr * 1.7]; pts = pts.concat(qb(a, c, b, 8)); }
+  }
+  edge(0, 0, w, 0, 0, -1); edge(w, 0, w, h, 1, 0); edge(w, h, 0, h, 0, 1); edge(0, h, 0, 0, -1, 0);
+  return pts;
+}
+function revCloud() { A.placeAt([{ p: cloud(320, 190), c: '#d92d20', w: 3 }], [ctext('REV.', 160, 105, 26, '#d92d20')]); }
+function revTri() { var t = 70; A.placeAt([{ p: [[t / 2, 0], [t, t * .87], [0, t * .87], [t / 2, 0]], c: '#d92d20', w: 3 }], [ctext('A', t / 2, t * .72, 26, '#d92d20')]); }
+
+/* ---------- carimbos ---------- */
+var STAMPS = [['APROVADO', '#16a34a'], ['REPROVADO', '#d92d20'], ['REVISADO', '#2f5bea'], ['EM ANÁLISE', '#f59e0b'], ['CONFORME', '#16a34a'], ['NÃO CONFORME', '#d92d20'], ['AS BUILT', '#9333ea'], ['CONFIDENCIAL', '#d92d20'], ['RASCUNHO', '#6b7280']];
+function addStamp(name, col) {
+  var w = Math.max(230, name.length * 27 + 60), h = 96;
+  A.placeAt([{ p: [[0, 0], [w, 0], [w, h], [0, h], [0, 0]], c: col, w: 4 }, { p: [[8, 8], [w - 8, 8], [w - 8, h - 8], [8, h - 8], [8, 8]], c: col, w: 2 }], [ctext(name, w / 2, h / 2 + 7, 32, col), ctext(stampT(), w / 2, h - 18, 14, col)]);
+}
+function addSign() {
+  var w = 330, h = 120, c = S.pen.c;
+  A.placeAt([{ p: [[0, 0], [w, 0], [w, h], [0, h], [0, 0]], c: c, w: 2.5 }, { p: [[0, h / 2], [w, h / 2]], c: c, w: 2 }, { p: [[w * .45, 0], [w * .45, h]], c: c, w: 2 }],
+    [ctext('Data', w * .225, 38, 20, c), ctext(stamp(), w * .72, 38, 20, c), ctext('Visto', w * .225, 98, 20, c)]);
+}
+function marksMenu() {
+  CP.ui.sheetMenu('<h3>Marcações de engenharia</h3><button type="button" class="opt" data-a="b1">Balão numerado (auto-incrementa)</button><button type="button" class="opt" data-a="b2">Balão com seta de chamada</button><button type="button" class="opt" data-a="br">Zerar contagem dos balões</button>' +
+    '<button type="button" class="opt" data-a="cl">Nuvem de revisão</button><button type="button" class="opt" data-a="rv">Marca de revisão (triângulo)</button><button type="button" class="opt" data-a="sg">Quadro Data / Visto</button>' +
+    '<div style="font-weight:700;margin:6px 0 2px">Carimbos (com data e hora)</div><div style="display:flex;flex-wrap:wrap;gap:6px">' + STAMPS.map(function (s, i) { return '<button type="button" class="chip" data-s="' + i + '" style="color:' + s[1] + ';font-weight:700">' + esc(s[0]) + '</button>'; }).join('') + '</div><button type="button" class="opt" id="mkX">Fechar</button>', function (h, close) {
+    h.querySelector('#mkX').addEventListener('click', close);
+    CP.$$('[data-a]', h).forEach(function (b) { b.addEventListener('click', function () { var a = b.getAttribute('data-a'); close(); ({ b1: function () { balloon(false); }, b2: function () { balloon(true); }, br: balloonReset, cl: revCloud, rv: revTri, sg: addSign })[a](); }); });
+    CP.$$('[data-s]', h).forEach(function (b) { b.addEventListener('click', function () { var s = STAMPS[+b.getAttribute('data-s')]; close(); addStamp(s[0], s[1]); }); });
+  });
+}
+CP.marksMenu = marksMenu;
+
+/* ---------- medição em escala ---------- */
+var mm = { on: false, mode: 'dist', pts: [], bar: null }; /* mm por unidade lógica: n.cal = { k: mm por unidade, ref: texto } */
+function kOf() { var n = note(); return n && n.cal && n.cal.k > 0 ? n.cal.k : 0.21; }
+function fmtLen(units) { var v = units * kOf(); return v >= 1000 ? CP.math.fmt(Math.round(v / 10) / 100) + ' m' : CP.math.fmt(Math.round(v * 10) / 10) + ' mm'; }
+function fmtArea(u2) { var v = u2 * kOf() * kOf() / 1e6; return v >= 0.01 ? CP.math.fmt(Math.round(v * 1000) / 1000) + ' m²' : CP.math.fmt(Math.round(v * 1e6 / 100) / 100) + ' cm²'; }
+function setBar(t) { if (mm.bar) mm.bar.querySelector('.cmsg').textContent = t; }
+function stopMeasure() { mm.on = false; mm.pts = []; if (mm.bar) { mm.bar.remove(); mm.bar = null; } document.removeEventListener('pointerdown', mDown, true); E.drawLive(null); }
+function dimLine(a, b) { var L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / L * 9, ny = (b[0] - a[0]) / L * 9; return [{ p: [a, b], c: '#0891b2', w: 2 }, { p: [[a[0] - nx, a[1] - ny], [a[0] + nx, a[1] + ny]], c: '#0891b2', w: 2 }, { p: [[b[0] - nx, b[1] - ny], [b[0] + nx, b[1] + ny]], c: '#0891b2', w: 2 }]; }
+function finishPoly() {
+  var p = mm.pts, n = note(); if (mm.mode === 'cal') return;
+  if (p.length < 2) { CP.toast('Toque em pelo menos 2 pontos.'); return; }
+  var items = [], texts = [], L = 0, i, cx = 0, cy = 0;
+  if (mm.mode === 'area') {
+    if (p.length < 3) { CP.toast('Toque em pelo menos 3 pontos.'); return; }
+    var ar = 0; for (i = 0; i < p.length; i++) { var q = p[(i + 1) % p.length]; ar += p[i][0] * q[1] - q[0] * p[i][1]; cx += p[i][0]; cy += p[i][1]; } ar = Math.abs(ar) / 2; cx /= p.length; cy /= p.length;
+    items.push({ p: p.concat([p[0]]), c: '#0891b2', w: 2.5 }); texts.push(ctext(fmtArea(ar), cx, cy + 6, 22, '#0891b2'));
+  } else {
+    for (i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+    if (p.length === 2) dimLine(p[0], p[1]).forEach(function (d) { items.push(d); }); else { items.push({ p: p, c: '#0891b2', w: 2.5 }); }
+    var mid = p[Math.floor((p.length - 1) / 2)], nx = p[Math.floor((p.length - 1) / 2) + 1] || mid; cx = (mid[0] + nx[0]) / 2; cy = (mid[1] + nx[1]) / 2 - 12;
+    texts.push(ctext(fmtLen(L), cx, cy, 22, '#0891b2'));
+  }
+  addGroup(items, texts); mm.pts = []; E.drawLive(null); setBar(mm.mode === 'area' ? 'Medida inserida. Toque os pontos da próxima área' : 'Medida inserida. Toque o primeiro ponto da próxima');
+}
+function liveMeasure() { var d = []; mm.pts.forEach(function (q) { d.push(q[0], q[1], 60); }); if (d.length >= 6 || mm.pts.length === 1) E.drawLive({ k: 'p', c: '#0891b2', w: 2.5, d: d.length >= 6 ? d : d.concat(d) }); }
+function mDown(e) {
+  if (!mm.on) return; var sheet = $('#sheet'); if (!sheet || !sheet.contains(e.target)) return;
+  e.preventDefault(); e.stopPropagation(); var q = E.toLogical(e); mm.pts.push([Math.round(q.x * 10) / 10, Math.round(q.y * 10) / 10]);
+  if (mm.mode === 'cal' && mm.pts.length === 2) { askCal(); return; }
+  if (mm.mode === 'dist' && mm.pts.length === 2) { finishPoly(); return; }
+  liveMeasure(); setBar(mm.mode === 'cal' ? 'Toque no 2º ponto da referência' : mm.pts.length + ' ponto(s) · toque mais ou “Fechar medida”');
+}
+function askCal() {
+  var a = mm.pts[0], b = mm.pts[1], L = Math.hypot(b[0] - a[0], b[1] - a[1]); mm.pts = []; E.drawLive(null);
+  CP.ui.sheetMenu('<h3>Distância real entre os dois pontos</h3><div style="display:flex;gap:8px"><input id="cV" type="text" inputmode="decimal" placeholder="ex.: 5" style="flex:1;min-width:0"><select id="cU" style="min-width:90px"><option value="1000">m</option><option value="10">cm</option><option value="1">mm</option></select></div><div class="btns"><button type="button" id="cNo">Cancelar</button><button type="button" class="ok" id="cOk">Definir escala</button></div>', function (h, close) {
+    h.querySelector('#cNo').addEventListener('click', close);
+    h.querySelector('#cOk').addEventListener('click', function () {
+      var v = parseFloat(String(h.querySelector('#cV').value).replace(',', '.')), u = +h.querySelector('#cU').value; if (!(v > 0) || !(L > 2)) { CP.toast('Digite uma distância maior que zero.'); return; }
+      var n = note(); n.cal = { k: v * u / L, ref: 'calibrada' }; CP.queueSave(n); close(); CP.toast('Escala definida. Agora as medições saem em unidades reais.');
+    });
+  });
+}
+function startMeasure(mode) {
+  if (mm.on) stopMeasure(); mm.on = true; mm.mode = mode; mm.pts = [];
+  var bar = document.createElement('div'); bar.className = 'connbar'; mm.bar = bar;
+  bar.innerHTML = '<span class="cmsg">' + (mode === 'cal' ? 'Toque nos 2 extremos de uma medida conhecida' : mode === 'dist' ? 'Toque nos 2 pontos' : mode === 'poly' ? 'Toque os pontos do caminho (cabo, tubulação)' : 'Toque os vértices da área') + '</span>' + (mode === 'poly' || mode === 'area' ? '<button type="button" data-k="f">Fechar medida</button>' : '') + '<button type="button" class="ok" data-k="x">Concluir</button>';
+  document.body.appendChild(bar);
+  CP.$$('[data-k]', bar).forEach(function (b) { b.addEventListener('pointerdown', function (e) { e.stopPropagation(); }); b.addEventListener('click', function () { if (b.getAttribute('data-k') === 'x') stopMeasure(); else finishPoly(); }); });
+  document.addEventListener('pointerdown', mDown, true);
+}
+function measureMenu() {
+  var n = note(), cur = n && n.cal ? 'escala definida' : 'sem escala: 1 unidade = 0,21 mm do papel';
+  CP.ui.sheetMenu('<h3>Medir em escala</h3><p style="margin:0;color:var(--muted);font-size:14px">Estado: ' + cur + '.</p><button type="button" class="opt" data-m="cal">1. Calibrar com uma medida conhecida</button>' +
+    '<div style="display:flex;gap:8px;align-items:center"><span>ou escala 1 :</span><input id="mR" type="text" inputmode="decimal" placeholder="ex.: 50" style="flex:1;min-width:0"><button type="button" class="chip" id="mRok">Aplicar</button></div>' +
+    '<button type="button" class="opt" data-m="dist">Distância (2 pontos)</button><button type="button" class="opt" data-m="poly">Caminho (cabo, eletroduto)</button><button type="button" class="opt" data-m="area">Área</button><button type="button" class="opt" id="mX">Fechar</button>', function (h, close) {
+    h.querySelector('#mX').addEventListener('click', close);
+    CP.$$('[data-m]', h).forEach(function (b) { b.addEventListener('click', function () { close(); startMeasure(b.getAttribute('data-m')); }); });
+    h.querySelector('#mRok').addEventListener('click', function () { var r = parseFloat(String(h.querySelector('#mR').value).replace(',', '.')); if (!(r > 0)) { CP.toast('Digite a escala, por exemplo 50.'); return; } var nn = note(); nn.cal = { k: 0.21 * r, ref: '1:' + r }; CP.queueSave(nn); close(); CP.toast('Escala 1:' + r + ' definida (papel A4: 1 unidade = 0,21 mm × ' + r + ').'); });
+  });
+}
+CP.measureMenu = measureMenu;
+CP.mark = { balloon: balloon, cloud: revCloud, stamp: addStamp, fmtLen: fmtLen, fmtArea: fmtArea, startMeasure: startMeasure };
+})();
+(function () {
+'use strict';
+/* Calculadoras de automação. Cada uma mostra o resultado na hora e insere o rascunho na nota (texto monoespaçado). */
+var CP = window.CP, $ = CP.$, S = CP.S, E = CP.engine, A = CP.mathApi;
+function esc(s) { return CP.esc(s); }
+function num(v) { var t = String(v == null ? '' : v).trim().replace(/\s/g, '').replace(',', '.'); if (t === '') return NaN; return Number(t); }
+function f(x, d) { if (!isFinite(x)) return '—'; var s = Number(Math.abs(x) < 1e-9 ? 0 : x).toPrecision(d || 5); if (/e/.test(s)) s = Number(s).toString(); if (/e/.test(s)) return s.replace('.', ','); if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '').replace(/\.$/, ''); return s.replace('.', ','); }
+function pad(s, n) { s = String(s); while (s.length < n) s += ' '; return s; }
+function insertMono(lines) {
+  var n = CP.cur(); if (!n) return; var txt = lines.join('\n'), size = 18, maxc = Math.max.apply(null, lines.map(function (l) { return l.length; })), wpx = Math.min(900, Math.max(260, Math.round(maxc * size * 0.62) + 28)), c = A.viewCenter();
+  var tx = A.mkText(txt, 60, c.y - 80, size, S.pen.c, { w: wpx, mono: true });
+  n.texts.push(tx); E.push({ t: 'tadd', tx: tx }); if (E.placeTexts) E.placeTexts(); CP.queueSave(n); CP.toast('Cálculo inserido. Toque nele para editar ou arraste pela bolinha.');
+}
+var CALCS = [];
+function calc(group, name, fields, run) { CALCS.push({ g: group, name: name, fields: fields, run: run }); }
+function nf(k, label, def, hint) { return { k: k, label: label, t: 'n', def: def == null ? '' : def, hint: hint }; }
+function sf(k, label, def, hint) { return { k: k, label: label, t: 's', def: def || '', hint: hint }; }
+function sel(k, label, opts, def) { return { k: k, label: label, t: 'sel', opts: opts, def: def == null ? opts[0][0] : def }; }
+function need(v, ks) { ks.forEach(function (k) { if (!isFinite(v[k])) throw new Error('Preencha ' + k.replace(/_/g, ' ') + '.'); }); }
+
+/* ---------- Sinais ---------- */
+calc('Sinais', '4–20 mA ↔ unidade de engenharia', [nf('mín', 'Faixa mínima (LRV)', '0'), nf('máx', 'Faixa máxima (URV)', '100'), sf('un', 'Unidade', 'bar'), nf('sm', 'Sinal mínimo', '4', 'mA ou V'), nf('sM', 'Sinal máximo', '20'), sf('su', 'Unidade do sinal', 'mA'), nf('x', 'Sinal medido (opcional)', ''), nf('y', 'Valor de engenharia (opcional)', '')], function (v) {
+  need(v, ['mín', 'máx', 'sm', 'sM']); if (v.máx === v.mín || v.sM === v.sm) throw new Error('A faixa não pode ter largura zero.');
+  var L = ['Faixa ' + f(v.mín) + ' a ' + f(v.máx) + ' ' + v.un + '  ↔  ' + f(v.sm) + ' a ' + f(v.sM) + ' ' + v.su, 'Resolução: ' + f((v.máx - v.mín) / (v.sM - v.sm)) + ' ' + v.un + ' por ' + v.su, ''];
+  if (isFinite(v.x)) { var p = (v.x - v.sm) / (v.sM - v.sm), y = v.mín + p * (v.máx - v.mín); L.push(f(v.x) + ' ' + v.su + ' → ' + f(y) + ' ' + v.un + '  (' + f(p * 100, 5) + ' %)'); if (v.su === 'mA' && v.sm === 4) { if (v.x < 3.6) L.push('⚠ Abaixo de 3,6 mA: falha (fio rompido ou sensor em falha).'); else if (v.x < 3.8) L.push('⚠ Entre 3,6 e 3,8 mA: abaixo da faixa, saturado.'); else if (v.x > 21) L.push('⚠ Acima de 21 mA: falha do transmissor.'); else if (v.x > 20.5) L.push('⚠ Entre 20,5 e 21 mA: acima da faixa, saturado.'); } }
+  if (isFinite(v.y)) { var pp = (v.y - v.mín) / (v.máx - v.mín), xx = v.sm + pp * (v.sM - v.sm); L.push(f(v.y) + ' ' + v.un + ' → ' + f(xx) + ' ' + v.su + '  (' + f(pp * 100, 5) + ' %)'); }
+  if (!isFinite(v.x) && !isFinite(v.y)) L.push('Preencha um valor de sinal ou de engenharia para converter.');
+  L.push('', 'Tabela 0 / 25 / 50 / 75 / 100 %:'); [0, .25, .5, .75, 1].forEach(function (q) { L.push('  ' + pad(f(q * 100) + ' %', 8) + pad(f(v.sm + q * (v.sM - v.sm)) + ' ' + v.su, 12) + f(v.mín + q * (v.máx - v.mín)) + ' ' + v.un); });
+  return L;
+});
+
+/* ---------- Unidades ---------- */
+var UN = {
+  'Pressão': { b: 'Pa', u: [['Pa', 1], ['kPa', 1e3], ['MPa', 1e6], ['bar', 1e5], ['mbar', 100], ['psi', 6894.757293], ['atm', 101325], ['mmHg', 133.322387], ['kgf/cm²', 98066.5], ['mH₂O', 9806.65], ['inH₂O', 249.0889]] },
+  'Vazão': { b: 'm³/s', u: [['m³/h', 1 / 3600], ['m³/s', 1], ['L/s', 1e-3], ['L/min', 1 / 60000], ['L/h', 1 / 3.6e6], ['GPM (US)', 6.30901964e-5], ['CFM', 4.71947443e-4]] },
+  'Temperatura': { b: 'K', t: 1, u: [['°C'], ['K'], ['°F']] },
+  'Comprimento': { b: 'm', u: [['m', 1], ['mm', 1e-3], ['cm', 1e-2], ['km', 1e3], ['in', 0.0254], ['ft', 0.3048], ['yd', 0.9144], ['mi', 1609.344]] },
+  'Massa': { b: 'kg', u: [['kg', 1], ['g', 1e-3], ['t', 1e3], ['lb', 0.45359237], ['oz', 0.028349523]] },
+  'Torque': { b: 'N·m', u: [['N·m', 1], ['N·cm', 0.01], ['kgf·m', 9.80665], ['kgf·cm', 0.0980665], ['lbf·ft', 1.35581795], ['lbf·in', 0.112984829]] },
+  'Força': { b: 'N', u: [['N', 1], ['kN', 1e3], ['kgf', 9.80665], ['lbf', 4.44822162]] },
+  'Potência': { b: 'W', u: [['W', 1], ['kW', 1e3], ['MW', 1e6], ['cv', 735.49875], ['hp', 745.699872], ['BTU/h', 0.29307107], ['TR', 3516.8528]] },
+  'Energia': { b: 'J', u: [['J', 1], ['kJ', 1e3], ['Wh', 3600], ['kWh', 3.6e6], ['kcal', 4184], ['BTU', 1055.05585]] },
+  'Velocidade': { b: 'm/s', u: [['m/s', 1], ['km/h', 1 / 3.6], ['m/min', 1 / 60], ['ft/s', 0.3048], ['mph', 0.44704]] },
+  'Volume': { b: 'm³', u: [['L', 1e-3], ['mL', 1e-6], ['m³', 1], ['gal (US)', 3.785411784e-3], ['ft³', 0.028316847]] }
+};
+function convUnits(val, from) {
+  var cat = null, k; for (k in UN) UN[k].u.forEach(function (u) { if (k + '|' + u[0] === from) cat = k; }); if (!cat) throw new Error('Escolha uma unidade.');
+  var name = from.split('|')[1], C = UN[cat], out = [];
+  if (C.t) { var K = name === '°C' ? val + 273.15 : name === '°F' ? (val - 32) * 5 / 9 + 273.15 : val; out = [['°C', K - 273.15], ['K', K], ['°F', (K - 273.15) * 9 / 5 + 32]]; }
+  else { var base = val * C.u.filter(function (u) { return u[0] === name; })[0][1]; out = C.u.map(function (u) { return [u[0], base / u[1]]; }); }
+  return [f(val) + ' ' + name + ' equivale a:', ''].concat(out.map(function (o) { return '  ' + pad(f(o[1], 7), 16) + o[0]; }));
+}
+var unitOpts = []; Object.keys(UN).forEach(function (k) { UN[k].u.forEach(function (u) { unitOpts.push([k + '|' + u[0], k + ' · ' + u[0]]); }); });
+calc('Unidades', 'Conversor de unidades', [nf('v', 'Valor', '1'), sel('u', 'Unidade de origem', unitOpts, 'Pressão|bar')], function (v) { need(v, ['v']); return convUnits(v.v, v.u); });
+
+/* ---------- Elétrica ---------- */
+calc('Elétrica', 'Lei de Ohm e potência', [nf('V', 'Tensão V (volts)', ''), nf('I', 'Corrente I (ampères)', ''), nf('R', 'Resistência R (ohms)', ''), nf('P', 'Potência P (watts)', ''), { k: '_', t: 'note', text: 'Preencha quaisquer 2 campos.' }], function (v) {
+  var k = ['V', 'I', 'R', 'P'].filter(function (x) { return isFinite(v[x]); }); if (k.length < 2) throw new Error('Preencha pelo menos 2 campos.');
+  var a = k[0], b = k[1], V, I, R, P;
+  if (a === 'V' && b === 'I') { V = v.V; I = v.I; R = V / I; P = V * I; } else if (a === 'V' && b === 'R') { V = v.V; R = v.R; I = V / R; P = V * V / R; } else if (a === 'V' && b === 'P') { V = v.V; P = v.P; I = P / V; R = V * V / P; }
+  else if (a === 'I' && b === 'R') { I = v.I; R = v.R; V = I * R; P = I * I * R; } else if (a === 'I' && b === 'P') { I = v.I; P = v.P; V = P / I; R = P / (I * I); } else { R = v.R; P = v.P; V = Math.sqrt(P * R); I = Math.sqrt(P / R); }
+  var L = ['V = ' + f(V) + ' V', 'I = ' + f(I) + ' A', 'R = ' + f(R) + ' Ω', 'P = ' + f(P) + ' W'];
+  if (k.length > 2) L.push('', '(usei ' + a + ' e ' + b + '; os demais campos foram ignorados)'); return L;
+});
+var STD_BRK = [2, 4, 6, 10, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800];
+calc('Elétrica', 'Corrente de motor ou carga', [nf('p', 'Potência', '7,5'), sel('pu', 'Unidade', [['kW', 'kW (potência no eixo)'], ['cv', 'cv'], ['hp', 'hp']], 'kW'), nf('V', 'Tensão (V)', '380'), sel('ph', 'Fases', [['3', 'Trifásico'], ['1', 'Monofásico']], '3'), nf('cos', 'Fator de potência cos φ', '0,85'), nf('eta', 'Rendimento η', '0,90')], function (v) {
+  need(v, ['p', 'V', 'cos', 'eta']); var kw = v.pu === 'cv' ? v.p * 0.73549875 : v.pu === 'hp' ? v.p * 0.745699872 : v.p, pin = kw / v.eta, three = v.ph === '3', I = pin * 1000 / ((three ? Math.sqrt(3) : 1) * v.V * v.cos);
+  var brk = STD_BRK.filter(function (b) { return b >= I * 1.25; })[0] || '—', S = pin / v.cos;
+  return ['Potência no eixo: ' + f(kw) + ' kW', 'Potência elétrica: ' + f(pin) + ' kW   Aparente: ' + f(S) + ' kVA', 'Corrente: I = ' + f(I) + ' A', 'Disjuntor sugerido (≈1,25·I): ' + brk + ' A', '', 'Estimativa. Para projeto use a corrente de placa do motor', 'e a coordenação da NBR 5410 / IEC 60947-4.'];
+});
+var SECT = [1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95, 120, 150, 185, 240, 300];
+calc('Elétrica', 'Queda de tensão e bitola por queda', [nf('I', 'Corrente (A)', '20'), nf('L', 'Comprimento só de ida (m)', '50'), nf('S', 'Seção do cabo (mm²)', '6'), nf('V', 'Tensão (V)', '380'), sel('ph', 'Fases', [['3', 'Trifásico'], ['1', 'Monofásico']], '3'), sel('m', 'Condutor', [['0.0206', 'Cobre (70 °C)'], ['0.0338', 'Alumínio (70 °C)']], '0.0206'), nf('mx', 'Queda máxima (%)', '4')], function (v) {
+  need(v, ['I', 'L', 'S', 'V', 'mx']); var rho = +v.m, k = v.ph === '3' ? Math.sqrt(3) : 2, dv = k * rho * v.L * v.I / v.S, pc = dv / v.V * 100, smin = k * rho * v.L * v.I / (v.mx / 100 * v.V), next = SECT.filter(function (s) { return s >= smin; })[0] || '> 300';
+  return ['ΔV = ' + (v.ph === '3' ? '√3' : '2') + ' · ρ · L · I / S', 'ΔV = ' + f(dv) + ' V  =  ' + f(pc) + ' % de ' + f(v.V) + ' V', pc <= v.mx ? '✔ dentro do limite de ' + f(v.mx) + ' %' : '✘ acima do limite de ' + f(v.mx) + ' %', '', 'Seção mínima pela queda: ' + f(smin) + ' mm²  →  comercial: ' + next + ' mm²', '', 'Só verifica a queda de tensão (carga resistiva). A capacidade', 'de corrente do cabo deve ser conferida na NBR 5410.'];
+});
+var CORES = [['Preto', 0, 1], ['Marrom', 1, 10], ['Vermelho', 2, 100], ['Laranja', 3, 1e3], ['Amarelo', 4, 1e4], ['Verde', 5, 1e5], ['Azul', 6, 1e6], ['Violeta', 7, 1e7], ['Cinza', 8, 1e8], ['Branco', 9, 1e9], ['Ouro', -1, 0.1], ['Prata', -1, 0.01]];
+var TOL = [['Marrom', 1], ['Vermelho', 2], ['Verde', .5], ['Azul', .25], ['Violeta', .1], ['Ouro', 5], ['Prata', 10]];
+calc('Elétrica', 'Código de cores de resistor (4 faixas)', [sel('a', '1ª faixa', CORES.slice(1, 10).map(function (c) { return [String(c[1]), c[0] + ' (' + c[1] + ')']; }), '1'), sel('b', '2ª faixa', CORES.slice(0, 10).map(function (c) { return [String(c[1]), c[0] + ' (' + c[1] + ')']; }), '0'), sel('m', 'Multiplicador', CORES.map(function (c, i) { return [String(i), c[0] + ' (×' + f(c[2]) + ')']; }), '2'), sel('t', 'Tolerância', TOL.map(function (c, i) { return [String(i), c[0] + ' (±' + f(c[1]) + ' %)']; }), '5')], function (v) {
+  var r = (+v.a * 10 + +v.b) * CORES[+v.m][2], tol = TOL[+v.t][1];
+  function fr(x) { return x >= 1e6 ? f(x / 1e6) + ' MΩ' : x >= 1e3 ? f(x / 1e3) + ' kΩ' : f(x) + ' Ω'; }
+  return ['Valor: ' + fr(r) + '  ±' + f(tol) + ' %', 'Faixa real: ' + fr(r * (1 - tol / 100)) + ' a ' + fr(r * (1 + tol / 100))];
+});
+calc('Elétrica', 'Resistores em série e paralelo', [sf('l', 'Valores em ohms (separe por vírgula ou ;)', '100; 220; 330')], function (v) {
+  var xs = String(v.l).split(/[;\n]+|\s+(?=\d)/).join(';').split(';').map(function (t) { return num(t); }).filter(function (x) { return isFinite(x); }); if (xs.length < 2) throw new Error('Digite pelo menos 2 valores separados por ;');
+  var s = xs.reduce(function (a, b) { return a + b; }, 0), p = 1 / xs.reduce(function (a, b) { return a + 1 / b; }, 0);
+  return ['Valores: ' + xs.map(f).join(' · ') + ' Ω', 'Série:    R = ' + f(s) + ' Ω', 'Paralelo: R = ' + f(p) + ' Ω'];
+});
+
+/* ---------- Digital ---------- */
+function parseInt0(t, base) {
+  t = String(t).trim().replace(/[\s_]/g, '').toLowerCase(); if (!t) throw new Error('Digite um valor.'); var neg = false;
+  if (t[0] === '-') { neg = true; t = t.slice(1); }
+  if (/^0x/.test(t)) { base = 16; t = t.slice(2); } else if (/^0b/.test(t)) { base = 2; t = t.slice(2); } else if (/^0o/.test(t)) { base = 8; t = t.slice(2); }
+  var ok = { 2: /^[01]+$/, 8: /^[0-7]+$/, 10: /^\d+$/, 16: /^[0-9a-f]+$/ }[base]; if (!ok.test(t)) throw new Error('Esse valor não é válido na base ' + base + '.');
+  var n = BigInt((base === 16 ? '0x' : base === 2 ? '0b' : base === 8 ? '0o' : '') + t); return neg ? -n : n;
+}
+function grp(s, n) { var o = '', i; for (i = s.length; i > 0; i -= n) o = s.slice(Math.max(0, i - n), i) + (o ? ' ' + o : ''); return o; }
+calc('Digital', 'Sistemas numéricos (dec · hex · bin · BCD)', [sf('v', 'Valor (aceita 0x1F, 0b1010)', '255'), sel('b', 'Base do valor', [['10', 'Decimal'], ['16', 'Hexadecimal'], ['2', 'Binário'], ['8', 'Octal']], '10')], function (v) {
+  var n = parseInt0(v.v, +v.b), neg = n < 0n, a = neg ? -n : n, L = ['Decimal:     ' + n.toString(10), 'Hexadecimal: 0x' + a.toString(16).toUpperCase().replace(/^/, neg ? '-' : ''), 'Binário:     ' + (neg ? '-' : '') + grp(a.toString(2), 4), 'Octal:       ' + (neg ? '-' : '') + a.toString(8)];
+  if (!neg) L.push('BCD:         ' + a.toString(10).split('').map(function (d) { return ('000' + (+d).toString(2)).slice(-4); }).join(' '));
+  [8, 16, 32].forEach(function (bits) { var lim = 1n << BigInt(bits); if (n >= -(lim >> 1n) && n < lim) { var u = n < 0n ? n + lim : n, sg = u >= (lim >> 1n) ? u - lim : u; L.push('Compl. de 2 (' + bits + ' bits): ' + grp(u.toString(2).padStart(bits, '0'), 4) + '  =  ' + sg.toString() + ' com sinal'); } });
+  if (!neg && a >= 32n && a <= 126n) L.push('ASCII:       "' + String.fromCharCode(Number(a)) + '"');
+  if (!neg && a < (1n << 32n)) { var dv = new DataView(new ArrayBuffer(4)); dv.setUint32(0, Number(a)); L.push('Como float32 IEEE 754: ' + f(dv.getFloat32(0), 8)); }
+  var bits = []; if (!neg) a.toString(2).split('').reverse().forEach(function (c, i) { if (c === '1') bits.push(i); }); if (bits.length) L.push('Bits em 1: ' + bits.join(', '));
+  return L;
+});
+function crc16(bytes) { var c = 0xFFFF, i, j; for (i = 0; i < bytes.length; i++) { c ^= bytes[i]; for (j = 0; j < 8; j++) c = (c & 1) ? (c >> 1) ^ 0xA001 : c >> 1; } return c & 0xFFFF; }
+function hx(n, d) { return ('0000000' + n.toString(16).toUpperCase()).slice(-d); }
+calc('Digital', 'Modbus: CRC-16 e float em registradores', [sf('b', 'Quadro RTU em hex (sem CRC)', '01 03 00 00 00 0A'), nf('fl', 'Número float32 para registradores (opcional)', '25,5'), sf('rg', 'Registradores em hex para float (opcional)', '41CC 0000')], function (v) {
+  var L = [], t = String(v.b).replace(/0x/gi, '').replace(/[^0-9a-f]/gi, '');
+  if (t.length >= 2 && t.length % 2 === 0) { var by = []; for (var i = 0; i < t.length; i += 2) by.push(parseInt(t.substr(i, 2), 16)); var c = crc16(by); L.push('Quadro: ' + by.map(function (x) { return hx(x, 2); }).join(' '), 'CRC-16 (Modbus) = 0x' + hx(c, 4) + '  →  enviar ' + hx(c & 255, 2) + ' ' + hx(c >> 8, 2) + ' (byte baixo primeiro)', 'Quadro completo: ' + by.concat([c & 255, c >> 8]).map(function (x) { return hx(x, 2); }).join(' ')); }
+  else if (t.length) throw new Error('O quadro em hex precisa ter um número par de dígitos.');
+  if (isFinite(v.fl)) { var dv = new DataView(new ArrayBuffer(4)); dv.setFloat32(0, v.fl); var q = [0, 1, 2, 3].map(function (i) { return hx(dv.getUint8(i), 2); }); L.push('', 'Float ' + f(v.fl) + ' → 0x' + q.join(''), '  ABCD (padrão):          ' + q[0] + q[1] + ' ' + q[2] + q[3], '  CDAB (palavras trocadas): ' + q[2] + q[3] + ' ' + q[0] + q[1], '  BADC (bytes trocados):    ' + q[1] + q[0] + ' ' + q[3] + q[2], '  DCBA (invertido):         ' + q[3] + q[2] + ' ' + q[1] + q[0]); }
+  var r = String(v.rg).replace(/0x/gi, '').replace(/[^0-9a-f]/gi, '');
+  if (r.length === 8) { var d2 = new DataView(new ArrayBuffer(4)), orders = { ABCD: [0, 1, 2, 3], CDAB: [2, 3, 0, 1], BADC: [1, 0, 3, 2], DCBA: [3, 2, 1, 0] }, by2 = [0, 1, 2, 3].map(function (i) { return parseInt(r.substr(i * 2, 2), 16); }); L.push('', 'Registradores ' + r.slice(0, 4) + ' ' + r.slice(4) + ' como float32:'); Object.keys(orders).forEach(function (k) { orders[k].forEach(function (src, i) { d2.setUint8(i, by2[src]); }); L.push('  ' + k + ' = ' + f(d2.getFloat32(0), 8)); }); }
+  if (!L.length) throw new Error('Preencha o quadro, o float ou os registradores.'); return L;
+});
+
+/* ---------- Álgebra booleana ---------- */
+function boolParse(src) {
+  var s = String(src).toUpperCase().replace(/\bXNOR\b/g, '≡').replace(/\bNAND\b/g, '↑').replace(/\bNOR\b/g, '↓').replace(/\bAND\b/g, '&').replace(/\bXOR\b/g, '^').replace(/\bOR\b/g, '|').replace(/\bNOT\b/g, '!').replace(/[·*.∧]/g, '&').replace(/[+∨]/g, '|').replace(/[¬~/]/g, '!').replace(/[⊕]/g, '^').replace(/\s+/g, '');
+  var i = 0, vars = {};
+  function tk() { return s[i]; }
+  function pr() { var c = tk(); if (c === '!') { i++; var x = pr(); return function (e) { return !x(e); }; } if (c === '(') { i++; var y = or(); if (tk() !== ')') throw new Error('Faltou fechar parênteses.'); i++; return post(y); } if (c === '0' || c === '1') { i++; var k = c === '1'; return post(function () { return k; }); } if (c && /[A-Z]/.test(c)) { i++; vars[c] = 1; return post(function (e) { return !!e[c]; }); } throw new Error('Expressão inválida perto de “' + (c || 'fim') + '”.'); }
+  function post(x) { while (tk() === "'") { i++; var y = x; x = function (e) { return !y(e); }; } return x; }
+  function and() { var x = pr(); while (tk() === '&' || (tk() && /[A-Z(!01]/.test(tk()))) { if (tk() === '&') i++; var y = pr(), a = x; x = (function (a2, b2) { return function (e) { return a2(e) && b2(e); }; })(a, y); } return x; }
+  function xor() { var x = and(); while (tk() === '^' || tk() === '≡') { var op = s[i++], y = and(), a = x; x = (function (a2, b2, o) { return function (e) { return o === '^' ? a2(e) !== b2(e) : a2(e) === b2(e); }; })(a, y, op); } return x; }
+  function or() { var x = xor(); while (tk() === '|' || tk() === '↑' || tk() === '↓') { var op = s[i++], y = xor(), a = x; x = (function (a2, b2, o) { return function (e) { return o === '|' ? (a2(e) || b2(e)) : o === '↑' ? !(a2(e) && b2(e)) : !(a2(e) || b2(e)); }; })(a, y, op); } return x; }
+  var fn = or(); if (i < s.length) throw new Error('Não entendi “' + s.slice(i) + '”.');
+  return { fn: fn, vars: Object.keys(vars).sort() };
+}
+function qm(mins, n) {
+  var groups = {}, primes = [], cur = mins.map(function (m) { return { v: m, mask: 0, used: false, m: [m] }; }), key = function (x) { return x.v + '/' + x.mask; };
+  while (cur.length) {
+    var next = {}, any = false;
+    cur.forEach(function (a) { cur.forEach(function (b) { if (a.mask === b.mask) { var d = a.v ^ b.v; if (d && (d & (d - 1)) === 0) { a.used = b.used = true; var nn = { v: a.v & b.v, mask: a.mask | d, used: false, m: a.m.concat(b.m) }; next[key(nn)] = nn; any = true; } } }); });
+    cur.forEach(function (a) { if (!a.used && !primes.some(function (p) { return key(p) === key(a); })) primes.push(a); });
+    cur = Object.keys(next).map(function (k) { return next[k]; });
+  }
+  var left = mins.slice(), chosen = [];
+  function cov(p) { return left.filter(function (m) { return p.m.indexOf(m) >= 0; }); }
+  mins.forEach(function (m) { var c = primes.filter(function (p) { return p.m.indexOf(m) >= 0; }); if (c.length === 1 && chosen.indexOf(c[0]) < 0) { chosen.push(c[0]); left = left.filter(function (x) { return c[0].m.indexOf(x) < 0; }); } });
+  while (left.length) { var best = primes.slice().sort(function (a, b) { return cov(b).length - cov(a).length; })[0]; if (!cov(best).length) break; chosen.push(best); left = left.filter(function (x) { return best.m.indexOf(x) < 0; }); }
+  return chosen;
+}
+calc('Digital', 'Álgebra booleana: tabela-verdade e simplificação', [sf('e', 'Expressão (ex.: A·B + /A·C  ou  A&B|!A&C)', 'A·B + /A·C'), { k: '_', t: 'note', text: 'Operadores: · * & (E)   + | (OU)   / ! ~ \' (NÃO)   ^ (XOR). Até 5 variáveis A–Z.' }], function (v) {
+  var P = boolParse(v.e), vs = P.vars, n = vs.length; if (!n) throw new Error('Use letras como variáveis (A, B, C…).'); if (n > 5) throw new Error('No máximo 5 variáveis.');
+  var rows = [], mins = [], i, j; for (i = 0; i < (1 << n); i++) { var e = {}; vs.forEach(function (c, k) { e[c] = !!((i >> (n - 1 - k)) & 1); }); var r = P.fn(e) ? 1 : 0; rows.push([i, r]); if (r) mins.push(i); }
+  var L = ['F = ' + String(v.e).trim(), '', vs.join(' ') + ' | F'].concat(rows.map(function (r) { return vs.map(function (c, k) { return (r[0] >> (n - 1 - k)) & 1; }).join(' ') + ' | ' + r[1]; }));
+  L.push('', 'Mintermos Σm(' + (mins.join(', ') || '—') + ')');
+  if (!mins.length) L.push('Simplificada: F = 0'); else if (mins.length === (1 << n)) L.push('Simplificada: F = 1');
+  else { var ch = qm(mins, n), terms = ch.map(function (p) { var t = vs.map(function (c, k) { var b = 1 << (n - 1 - k); if (p.mask & b) return ''; return (p.v & b) ? c : '/' + c; }).filter(Boolean).join('·'); return t; }); L.push('Simplificada (soma de produtos): F = ' + terms.join(' + ')); }
+  if (n >= 2 && n <= 4) {
+    var gray = ['00', '01', '11', '10'], rn = n === 2 ? 1 : n === 3 ? 1 : 2, cn = n - rn, rl = vs.slice(0, rn).join(''), cl = vs.slice(rn).join(''), rg = rn === 1 ? ['0', '1'] : gray, cg = cn === 1 ? ['0', '1'] : gray;
+    L.push('', 'Mapa de Karnaugh  (linhas ' + rl + ' · colunas ' + cl + ')', '       ' + cg.join('   '));
+    rg.forEach(function (rr) { L.push(pad(rr, 5) + '  ' + cg.map(function (cc) { var idx = parseInt(rr + cc, 2); return '' + rows[idx][1]; }).join('    ')); });
+  }
+  return L;
+});
+
+/* ---------- interface ---------- */
+function fieldHtml(fd, i) {
+  if (fd.t === 'note') return '<p style="margin:0;color:var(--muted);font-size:13px">' + esc(fd.text) + '</p>';
+  var lab = '<label style="display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--muted)">' + esc(fd.label);
+  if (fd.t === 'sel') return lab + '<select data-k="' + fd.k + '" style="min-height:44px;font-size:16px">' + fd.opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === fd.def ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></label>';
+  return lab + '<input data-k="' + fd.k + '" type="text" ' + (fd.t === 'n' ? 'inputmode="decimal"' : '') + ' autocomplete="off" autocapitalize="off" spellcheck="false" value="' + esc(fd.def) + '" style="min-height:44px;font-size:16px"></label>';
+}
+function openCalc(c) {
+  CP.ui.sheetMenu('<h3>' + esc(c.name) + '</h3><div style="display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto">' + c.fields.map(fieldHtml).join('') + '</div><pre id="cR" style="margin:6px 0 0;padding:10px;border-radius:12px;background:var(--panel-2);font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;max-height:30vh;overflow:auto;user-select:text;-webkit-user-select:text"></pre><div class="btns"><button type="button" id="cX">Fechar</button><button type="button" class="ok" id="cI">Inserir na nota</button></div>', function (h, close) {
+    var out = h.querySelector('#cR'), last = null;
+    function vals() { var v = {}; c.fields.forEach(function (fd) { if (fd.t === 'note') return; var el = h.querySelector('[data-k="' + fd.k + '"]'), raw = el ? el.value : ''; v[fd.k] = fd.t === 'n' ? num(raw) : raw; }); return v; }
+    function go() { try { last = c.run(vals()); out.textContent = last.join('\n'); out.style.color = ''; } catch (e) { last = null; out.textContent = e && e.message ? e.message : 'Confira os valores.'; out.style.color = 'var(--danger)'; } }
+    CP.$$('[data-k]', h).forEach(function (el) { el.addEventListener('input', go); el.addEventListener('change', go); }); go();
+    h.querySelector('#cX').addEventListener('click', close);
+    h.querySelector('#cI').addEventListener('click', function () { if (!last) { CP.toast('Corrija os valores antes de inserir.'); return; } close(); insertMono([c.name, ''].concat(last)); });
+  });
+}
+CP.calcMenu = function () {
+  var groups = [], by = {}; CALCS.forEach(function (c) { if (!by[c.g]) { by[c.g] = []; groups.push(c.g); } by[c.g].push(c); });
+  var html = '<h3>Calculadoras de automação</h3>'; groups.forEach(function (g) { html += '<div style="font-weight:700;margin:6px 0 2px">' + esc(g) + '</div>' + by[g].map(function (c) { return '<button type="button" class="opt" data-i="' + CALCS.indexOf(c) + '">' + esc(c.name) + '</button>'; }).join(''); });
+  CP.ui.sheetMenu(html + '<button type="button" class="opt" id="kX">Fechar</button>', function (h, close) {
+    var b = h.querySelector('.box'); if (b) { b.style.maxHeight = '86vh'; b.style.overflow = 'auto'; }
+    h.querySelector('#kX').addEventListener('click', close);
+    CP.$$('[data-i]', h).forEach(function (bt) { bt.addEventListener('click', function () { close(); openCalc(CALCS[+bt.getAttribute('data-i')]); }); });
+  });
+};
+CP.calcApi = { fieldHtml: fieldHtml, nf: nf, sf: sf, sel: sel, calcs: CALCS, boolParse: boolParse, qm: qm, crc16: crc16, convUnits: convUnits, insertMono: insertMono, f: f, num: num, pad: pad };
+})();
+(function () {
+'use strict';
+/* Controle: função de transferência (degrau, Bode, polos e zeros), simulador de PID com sintonia e gráfico de dados CSV. */
+var CP = window.CP, $ = CP.$, S = CP.S, E = CP.engine, A = CP.mathApi, K = CP.calcApi, PI = Math.PI;
+var f = K.f, num = K.num, esc = CP.esc;
+
+/* ---------- polinômios ---------- */
+function trim(c) { var i = 0; while (i < c.length - 1 && Math.abs(c[i]) < 1e-14) i++; return c.slice(i); }
+function parsePoly(str) {
+  str = String(str).trim().replace(/,/g, '.'); if (!str) throw new Error('Digite os coeficientes.');
+  if (!/[sS]/.test(str)) { var xs = str.split(/[\s;]+/).filter(Boolean).map(Number); if (xs.some(function (x) { return !isFinite(x); })) throw new Error('Coeficientes inválidos: use números separados por espaço, ex.: 1 3 2'); return trim(xs); }
+  var t = str.replace(/\s+/g, '').replace(/−/g, '-').replace(/·|\*/g, '').replace(/\^/g, '^'), terms = t.match(/[+-]?[^+-]+/g) || [], co = {}, mx = 0;
+  terms.forEach(function (tm) { var m = /^([+-]?)(\d*\.?\d*)(s(?:\^(\d+))?)?$/i.exec(tm); if (!m || (m[2] === '' && !m[3])) throw new Error('Não entendi o termo “' + tm + '”.'); var c = m[2] === '' ? 1 : Number(m[2]), e = m[3] ? (m[4] ? +m[4] : 1) : 0; if (m[1] === '-') c = -c; co[e] = (co[e] || 0) + c; mx = Math.max(mx, e); });
+  var o = []; for (var i = mx; i >= 0; i--) o.push(co[i] || 0); return trim(o);
+}
+function cadd(a, b) { return [a[0] + b[0], a[1] + b[1]]; }
+function csub(a, b) { return [a[0] - b[0], a[1] - b[1]]; }
+function cmul(a, b) { return [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]]; }
+function cdiv(a, b) { var d = b[0] * b[0] + b[1] * b[1] || 1e-300; return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d]; }
+function peval(c, z) { var r = [0, 0]; for (var i = 0; i < c.length; i++) r = cadd(cmul(r, z), [c[i], 0]); return r; }
+function roots(c) {
+  c = trim(c); var n = c.length - 1; if (n < 1) return []; var a = c.map(function (x) { return x / c[0]; }), R = 1 + Math.max.apply(null, a.slice(1).map(Math.abs)), z = [], k, it, j;
+  for (k = 0; k < n; k++) { var ang = 2 * PI * k / n + 0.4; z.push([R * Math.cos(ang) * 0.9, R * Math.sin(ang) * 0.9]); }
+  for (it = 0; it < 600; it++) {
+    var mv = 0;
+    for (k = 0; k < n; k++) { var d = [1, 0]; for (j = 0; j < n; j++) if (j !== k) d = cmul(d, csub(z[k], z[j])); var dz = cdiv(peval(a, z[k]), d); z[k] = csub(z[k], dz); mv = Math.max(mv, Math.abs(dz[0]) + Math.abs(dz[1])); }
+    if (mv < 1e-13) break;
+  }
+  return z.map(function (q) { var sc = 1 + Math.abs(q[0]); return { re: Math.abs(q[0]) < 1e-9 * sc ? 0 : q[0], im: Math.abs(q[1]) < 1e-7 * sc ? 0 : q[1] }; });
+}
+function fc(r) { return Math.abs(r.im) < 1e-12 ? f(r.re, 5) : f(r.re, 5) + (r.im < 0 ? ' − ' : ' + ') + f(Math.abs(r.im), 5) + 'j'; }
+
+/* ---------- simulação ---------- */
+function ssOf(nu, de) {
+  var n = de.length - 1, a = de.map(function (x) { return x / de[0]; }), b = []; for (var i = 0; i < n + 1 - nu.length; i++) b.push(0); nu.forEach(function (x) { b.push(x / de[0]); });
+  var D = b[0], C = [], j; for (j = 1; j <= n; j++) C.push(b[n - (j - 1)] - D * a[n - (j - 1)]);
+  return { n: n, a: a, C: C, D: D };
+}
+function stepOf(nu, de, T, N) {
+  var m = ssOf(nu, de), n = m.n, out = [], x = [], i, k;
+  for (i = 0; i < n; i++) x.push(0);
+  function der(x) { var d = []; for (var r = 0; r < n - 1; r++) d.push(x[r + 1]); var last = 1; for (var q = 0; q < n; q++) last -= m.a[n - q] * x[q]; d.push(last); return d; }
+  function y(x) { var s = m.D; for (var q = 0; q < n; q++) s += m.C[q] * x[q]; return s; }
+  if (n === 0) { for (i = 0; i <= N; i++) out.push(m.D); return out; }
+  var lam = Math.max.apply(null, roots(de).map(function (r) { return Math.hypot(r.re, r.im); }).concat([1e-9])), sub = Math.max(1, Math.ceil(T / N * lam / 1.2)), dt = T / N / sub;
+  if (sub * N > 4e6) throw new Error('Sistema muito rígido (polos de escalas muito diferentes) para simular com segurança.');
+  out.push(y(x));
+  for (i = 0; i < N; i++) {
+    for (k = 0; k < sub; k++) { var k1 = der(x), k2 = der(x.map(function (v, q) { return v + dt / 2 * k1[q]; })), k3 = der(x.map(function (v, q) { return v + dt / 2 * k2[q]; })), k4 = der(x.map(function (v, q) { return v + dt * k3[q]; })); x = x.map(function (v, q) { return v + dt / 6 * (k1[q] + 2 * k2[q] + 2 * k3[q] + k4[q]); }); }
+    out.push(y(x));
+  }
+  return out;
+}
+function interp(xs, ys) { return function (x) { var n = xs.length; if (x < xs[0] - 1e-12 || x > xs[n - 1] + 1e-12) return NaN; var lo = 0, hi = n - 1; while (hi - lo > 1) { var m = (lo + hi) >> 1; if (xs[m] <= x) lo = m; else hi = m; } var t = xs[hi] === xs[lo] ? 0 : (x - xs[lo]) / (xs[hi] - xs[lo]); return ys[lo] + (ys[hi] - ys[lo]) * t; }; }
+function plotSeries(series, x0, x1, opt) {
+  var all = [], i; series.forEach(function (s) { s.ys.forEach(function (y) { if (isFinite(y)) all.push(y); }); });
+  var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all); if (hi - lo < 1e-9) { lo -= 1; hi += 1; } var pd = (hi - lo) * 0.08;
+  var o = { grid: true, ymin: opt.ymin != null ? opt.ymin : lo - pd, ymax: opt.ymax != null ? opt.ymax : hi + pd, xl: opt.xl, yl: opt.yl };
+  return A.plot2D(series.map(function (s) { return { t: s.name, f: interp(s.xs, s.ys) }; }), x0, x1, o);
+}
+function stepInfo(ts, ys, yss) {
+  var L = [], n = ys.length, pk = 0, i; for (i = 1; i < n; i++) if (ys[i] > ys[pk]) pk = i;
+  if (!isFinite(yss) || Math.abs(yss) < 1e-12) { L.push('Valor final: não definido (sistema instável ou com integrador).'); return L; }
+  L.push('Valor final (G(0)): ' + f(yss, 5));
+  var os = (ys[pk] - yss) / Math.abs(yss) * 100; L.push('Sobressinal: ' + f(Math.max(0, os), 4) + ' %' + (os > 0.01 ? '   no pico em t = ' + f(ts[pk], 4) + ' s' : ''));
+  var a = -1, b = -1; for (i = 0; i < n; i++) { if (a < 0 && ys[i] >= 0.1 * yss) a = i; if (b < 0 && ys[i] >= 0.9 * yss) b = i; }
+  if (a >= 0 && b >= 0) L.push('Tempo de subida (10→90 %): ' + f(ts[b] - ts[a], 4) + ' s');
+  var ls = 0; for (i = 0; i < n; i++) if (Math.abs(ys[i] - yss) > 0.02 * Math.abs(yss)) ls = i; L.push('Tempo de acomodação (2 %): ' + (ls >= n - 2 ? 'maior que o tempo simulado' : f(ts[Math.min(n - 1, ls + 1)], 4) + ' s'));
+  return L;
+}
+
+/* ---------- Função de transferência ---------- */
+function tfParts(v) {
+  var nu = parsePoly(v.num), de = parsePoly(v.den); if (de.length < 2 && Math.abs(de[0]) < 1e-14) throw new Error('O denominador não pode ser zero.');
+  if (nu.length > de.length) throw new Error('O numerador não pode ter grau maior que o denominador (sistema impróprio).');
+  return { nu: nu, de: de, p: roots(de), z: nu.length > 1 ? roots(nu) : [] };
+}
+function polyText(c) { var n = c.length - 1, o = ''; c.forEach(function (x, i) { var e = n - i; if (Math.abs(x) < 1e-14) return; var t = (Math.abs(x) === 1 && e > 0 ? '' : f(Math.abs(x), 5)) + (e > 0 ? 's' + (e > 1 ? '^' + e : '') : ''); o += (o ? (x < 0 ? ' − ' : ' + ') : (x < 0 ? '−' : '')) + t; }); return o || '0'; }
+function tfTime(P) {
+  var re = P.p.map(function (r) { return Math.abs(r.re); }).filter(function (x) { return x > 1e-9; }), slow = re.length ? Math.min.apply(null, re) : 0.1, fast = re.length ? Math.max.apply(null, re) : 1;
+  var unstable = P.p.some(function (r) { return r.re > 1e-9; }), T = unstable ? Math.min(30 / fast, 6 / slow) : 6 / slow; if (!(T > 0) || !isFinite(T)) T = 10; return Math.min(T, 1e5);
+}
+function tfLines(v) {
+  var P = tfParts(v), L = ['G(s) = (' + polyText(P.nu) + ') / (' + polyText(P.de) + ')', '', 'Polos:'], stable = P.p.every(function (r) { return r.re < -1e-9; });
+  P.p.forEach(function (r) { L.push('  ' + fc(r)); }); if (P.z.length) { L.push('Zeros:'); P.z.forEach(function (r) { L.push('  ' + fc(r)); }); }
+  var marg = P.p.some(function (r) { return Math.abs(r.re) <= 1e-9; });
+  L.push('', 'Estabilidade (malha aberta): ' + (stable ? 'ESTÁVEL (todos os polos no semiplano esquerdo)' : P.p.some(function (r) { return r.re > 1e-9; }) ? 'INSTÁVEL (polo no semiplano direito)' : marg ? 'MARGINALMENTE ESTÁVEL (polo no eixo imaginário)' : '—'));
+  if (P.de.length === 3 && P.de[2] / P.de[0] > 0) { var wn = Math.sqrt(P.de[2] / P.de[0]), zt = P.de[1] / P.de[0] / (2 * wn); L.push('Sistema de 2ª ordem: ωn = ' + f(wn, 5) + ' rad/s, ζ = ' + f(zt, 4) + (zt < 1 ? ' (subamortecido)' : zt === 1 ? ' (criticamente amortecido)' : ' (superamortecido)')); }
+  var dc = P.nu[P.nu.length - 1] / P.de[P.de.length - 1]; if (isFinite(dc) && Math.abs(P.de[P.de.length - 1]) > 1e-12) L.push('Ganho DC: G(0) = ' + f(dc, 5));
+  return { P: P, lines: L, stable: stable };
+}
+function bodeData(P) {
+  var feats = P.p.concat(P.z).map(function (r) { return Math.hypot(r.re, r.im); }).filter(function (x) { return x > 1e-9; }), lo = feats.length ? Math.min.apply(null, feats) : 1, hi = feats.length ? Math.max.apply(null, feats) : 1,
+    w0 = Math.floor(Math.log10(lo)) - 1, w1 = Math.ceil(Math.log10(hi)) + 1, N = 400, xs = [], mag = [], ph = [], i, prev = null, off = 0;
+  for (i = 0; i <= N; i++) { var lw = w0 + (w1 - w0) * i / N, w = Math.pow(10, lw), jw = [0, w], g = cdiv(peval(P.nu, jw), peval(P.de, jw)), m = 20 * Math.log10(Math.hypot(g[0], g[1]) || 1e-300), p = Math.atan2(g[1], g[0]) * 180 / PI;
+    if (prev != null) { while (p + off - prev > 180) off -= 360; while (p + off - prev < -180) off += 360; } p += off; prev = p; xs.push(lw); mag.push(m); ph.push(p); }
+  return { xs: xs, mag: mag, ph: ph, w0: w0, w1: w1 };
+}
+function margins(B) {
+  var L = [], i, N = B.xs.length;
+  for (i = 1; i < N; i++) { if ((B.mag[i - 1] > 0) !== (B.mag[i] > 0)) { var t = B.mag[i - 1] / (B.mag[i - 1] - B.mag[i]), w = B.xs[i - 1] + (B.xs[i] - B.xs[i - 1]) * t, p = B.ph[i - 1] + (B.ph[i] - B.ph[i - 1]) * t; L.push('Margem de fase: ' + f(180 + p, 4) + '° em ωc = ' + f(Math.pow(10, w), 4) + ' rad/s'); break; } }
+  for (i = 1; i < N; i++) { if ((B.ph[i - 1] > -180) !== (B.ph[i] > -180)) { var t2 = (B.ph[i - 1] + 180) / (B.ph[i - 1] - B.ph[i]), m = B.mag[i - 1] + (B.mag[i] - B.mag[i - 1]) * t2, w2 = B.xs[i - 1] + (B.xs[i] - B.xs[i - 1]) * t2; L.push('Margem de ganho: ' + f(-m, 4) + ' dB em ω = ' + f(Math.pow(10, w2), 4) + ' rad/s'); break; } }
+  return L;
+}
+function pzMap(P) {
+  var pts = P.p.concat(P.z), mx = Math.max.apply(null, pts.map(function (r) { return Math.max(Math.abs(r.re), Math.abs(r.im)); }).concat([1e-6])) * 1.35, Wd = 440, cx = Wd / 2, cy = Wd / 2, k = (Wd / 2 - 20) / mx, items = [], texts = [], H = A.helpers;
+  items.push({ p: [[0, 0], [Wd, 0], [Wd, Wd], [0, Wd], [0, 0]], c: '#cbd5e1', w: 1.4 }, { p: [[0, cy], [Wd, cy]], c: '#14171c', w: 2 }, { p: H.headAt([Wd, cy], [Wd - 30, cy], 12, .45), c: '#14171c', w: 2 }, { p: [[cx, Wd], [cx, 0]], c: '#14171c', w: 2 }, { p: H.headAt([cx, 0], [cx, 30], 12, .45), c: '#14171c', w: 2 });
+  P.p.forEach(function (r) { var x = cx + r.re * k, y = cy - r.im * k; items.push({ p: [[x - 8, y - 8], [x + 8, y + 8]], c: '#d92d20', w: 3 }, { p: [[x - 8, y + 8], [x + 8, y - 8]], c: '#d92d20', w: 3 }); });
+  P.z.forEach(function (r) { var x = cx + r.re * k, y = cy - r.im * k; items.push({ p: H.ell(x, y, 8, 8), c: '#2f5bea', w: 3 }); });
+  texts.push(A.mkText('Re', Wd - 36, cy - 30, 17, '#14171c', { w: 40 }), A.mkText('Im', cx + 10, -4, 17, '#14171c', { w: 40 }), A.mkText('Mapa de polos (×) e zeros (○) · escala ±' + f(mx / 1.35 * 1.35, 3), 8, Wd + 24, 17, '#14171c', { w: 460 }));
+  return { items: items, texts: texts };
+}
+function shiftRes(r, dy) { return { items: r.items.map(function (it) { return { p: it.p.map(function (q) { return [q[0], q[1] + dy]; }), c: it.c, w: it.w }; }), texts: r.texts.map(function (t) { t.y += dy; return t; }) }; }
+function merge(a, b) { return { items: a.items.concat(b.items), texts: a.texts.concat(b.texts) }; }
+
+/* ---------- formulário genérico ---------- */
+function formMenu(title, fields, buttons, intro) {
+  CP.ui.sheetMenu('<h3>' + esc(title) + '</h3>' + (intro ? '<p style="margin:0;color:var(--muted);font-size:13px;line-height:1.4">' + intro + '</p>' : '') + '<div style="display:flex;flex-direction:column;gap:8px;max-height:38vh;overflow:auto">' + fields.map(K.fieldHtml).join('') + '</div><pre id="fR" style="margin:6px 0 0;padding:10px;border-radius:12px;background:var(--panel-2);font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;max-height:26vh;overflow:auto;user-select:text;-webkit-user-select:text"></pre><div class="btns" style="flex-wrap:wrap">' + buttons.map(function (b, i) { return '<button type="button" data-b="' + i + '"' + (b.ok ? ' class="ok"' : '') + '>' + esc(b.label) + '</button>'; }).join('') + '</div>', function (h, close) {
+    var out = h.querySelector('#fR');
+    function vals() { var v = {}; fields.forEach(function (fd) { if (fd.t === 'note') return; var el = h.querySelector('[data-k="' + fd.k + '"]'); v[fd.k] = fd.t === 'n' ? num(el ? el.value : '') : (el ? el.value : ''); }); return v; }
+    function show(lines, bad) { out.textContent = lines.join('\n'); out.style.color = bad ? 'var(--danger)' : ''; }
+    function setVal(k, x) { var el = h.querySelector('[data-k="' + k + '"]'); if (el) el.value = x; }
+    var ctl = { vals: vals, show: show, close: close, setVal: setVal };
+    CP.$$('[data-b]', h).forEach(function (bt) { bt.addEventListener('click', function () { try { buttons[+bt.getAttribute('data-b')].fn(vals(), ctl); } catch (e) { show([e && e.message ? e.message : 'Confira os valores.'], true); } }); });
+    if (buttons[0] && buttons[0].auto) { CP.$$('[data-k]', h).forEach(function (el) { el.addEventListener('input', function () { try { buttons[0].fn(vals(), ctl); } catch (e) { show([e && e.message ? e.message : 'Confira os valores.'], true); } }); }); try { buttons[0].fn(vals(), ctl); } catch (e) {} }
+    var bx = h.querySelector('.box'); if (bx) { bx.style.maxHeight = '88vh'; bx.style.overflow = 'auto'; }
+  });
+}
+function putPlot(r, ctl) { ctl.close(); A.placeAt(r.items, r.texts); }
+function tfMenu() {
+  formMenu('Função de transferência G(s)', [K.sf('num', 'Numerador (coeficientes ou polinômio)', '1', 'ex.: 10  ou  2 1  ou  2s+1'), K.sf('den', 'Denominador', 's^2 + 3s + 2', 'ex.: 1 3 2  ou  s^2+3s+2')], [
+    { label: 'Analisar', auto: true, fn: function (v, c) { var r = tfLines(v); var B = bodeData(r.P); c.show(r.lines.concat(['', 'Margens (se existirem):']).concat(margins(B).length ? margins(B) : ['  sem cruzamento na faixa analisada'])); } },
+    { label: 'Inserir degrau', ok: true, fn: function (v, c) { var r = tfLines(v), T = tfTime(r.P), N = 400, ys = stepOf(r.P.nu, r.P.de, T, N), ts = ys.map(function (_, i) { return T * i / N; }), dc = r.P.nu[r.P.nu.length - 1] / r.P.de[r.P.de.length - 1], res = plotSeries([{ name: 'resposta ao degrau y(t)', xs: ts, ys: ys }], 0, T, { xl: 't (s)', yl: 'y' });
+        var yss = r.stable ? dc : NaN, info = stepInfo(ts, ys, yss); res.texts.push(A.mkText(info.join('   ·   '), 8, 480, 15, '#6b7280', { w: 560 })); putPlot(res, c); CP.toast('Resposta ao degrau inserida.'); } },
+    { label: 'Inserir Bode', ok: true, fn: function (v, c) { var r = tfLines(v), B = bodeData(r.P), m1 = plotSeries([{ name: 'módulo |G(jω)| em dB', xs: B.xs, ys: B.mag }], B.w0, B.w1, { xl: 'log₁₀ ω (rad/s)', yl: 'dB' }), m2 = plotSeries([{ name: 'fase de G(jω) em graus', xs: B.xs, ys: B.ph }], B.w0, B.w1, { xl: 'log₁₀ ω (rad/s)', yl: 'graus' }); putPlot(merge(m1, shiftRes(m2, 560)), c); CP.toast('Diagrama de Bode inserido.'); } },
+    { label: 'Inserir polos e zeros', ok: true, fn: function (v, c) { putPlot(pzMap(tfLines(v).P), c); } },
+    { label: 'Inserir análise (texto)', fn: function (v, c) { var r = tfLines(v); c.close(); K.insertMono(['Função de transferência'].concat([''], r.lines)); } }
+  ], 'Digite os coeficientes em ordem decrescente de s (ex.: <b>1 3 2</b> = s²+3s+2) ou o polinômio (ex.: <b>s^2+3s+2</b>).');
+}
+
+/* ---------- PID ---------- */
+function tune(method, type, Kp0, tau, th, lam) {
+  var r = th / tau, o = { Kp: 0, Ti: Infinity, Td: 0 };
+  if (method === 'zn') { var b = tau / (Kp0 * th); if (type === 'P') o.Kp = b; else if (type === 'PI') { o.Kp = 0.9 * b; o.Ti = 3.33 * th; } else { o.Kp = 1.2 * b; o.Ti = 2 * th; o.Td = 0.5 * th; } }
+  else if (method === 'cc') { var a = tau / (Kp0 * th); if (type === 'P') o.Kp = a * (1 + r / 3); else if (type === 'PI') { o.Kp = a * (0.9 + r / 12); o.Ti = th * (30 + 3 * r) / (9 + 20 * r); } else { o.Kp = a * (4 / 3 + r / 4); o.Ti = th * (32 + 6 * r) / (13 + 8 * r); o.Td = 4 * th / (11 + 2 * r); } }
+  else { if (type === 'PID') { o.Kp = (tau + th / 2) / (Kp0 * (lam + th / 2)); o.Ti = tau + th / 2; o.Td = tau * th / (2 * tau + th); } else { o.Kp = tau / (Kp0 * (lam + th)); o.Ti = tau; if (type === 'P') o.Ti = Infinity; } }
+  return o;
+}
+function simPID(p) {
+  var dt = Math.min(p.tau, p.tau + p.th) / 200, N = Math.ceil(p.T / dt), nd = Math.round(p.th / dt), buf = [], y = 0, I = 0, prevM = 0, dF = 0, ts = [], pv = [], sp = [], mvv = [], i, Tf = Math.max(p.Td / 10, dt * 2), sat = p.sat;
+  for (i = 0; i <= nd; i++) buf.push(0);
+  var decim = Math.max(1, Math.floor(N / 500));
+  for (i = 0; i <= N; i++) {
+    var e = p.sp - y, d = p.Td > 0 ? (dF = dF + dt / (Tf + dt) * ((-(y - prevM)) / dt - dF)) : 0; prevM = y;
+    var u = p.Kp * (e + (isFinite(p.Ti) ? I / p.Ti : 0) + p.Td * d), uc = sat ? Math.max(0, Math.min(100, u)) : u;
+    if (isFinite(p.Ti) && (!sat || (u === uc || (u > uc) === (e < 0)))) I += e * dt;
+    buf.push(uc); var ud = buf.shift(); y += dt * (p.K * ud - y) / p.tau;
+    if (i % decim === 0) { ts.push(i * dt); pv.push(y); sp.push(p.sp); mvv.push(uc); }
+  }
+  return { ts: ts, pv: pv, sp: sp, mv: mvv };
+}
+function pidMenu() {
+  formMenu('Simulador de PID e sintonia', [K.nf('K', 'Ganho do processo K', '2'), K.nf('tau', 'Constante de tempo τ (s)', '10'), K.nf('th', 'Atraso de transporte θ (s)', '2'), K.sel('m', 'Método de sintonia', [['zn', 'Ziegler-Nichols (curva de reação)'], ['cc', 'Cohen-Coon'], ['im', 'Lambda / IMC'], ['man', 'Manual (digitar ganhos)']], 'cc'), K.sel('t', 'Controlador', [['PID', 'PID'], ['PI', 'PI'], ['P', 'P']], 'PID'), K.nf('lam', 'λ (só para Lambda/IMC)', '10'), K.nf('kp', 'Kp manual', '1'), K.nf('ti', 'Ti manual (s, vazio = sem integral)', '10'), K.nf('td', 'Td manual (s)', '0'), K.nf('sp', 'Degrau de referência (SP)', '1'), K.sel('sat', 'Saída do controlador', [['0', 'Sem limite'], ['1', 'Limitada em 0–100']], '0')], [
+    { label: 'Calcular', auto: true, fn: function (v, c) { var r = run(v); c.show(r.lines); } },
+    { label: 'Inserir curvas', ok: true, fn: function (v, c) { var r = run(v), T = r.s.ts[r.s.ts.length - 1], g1 = plotSeries([{ name: 'SP (referência)', xs: r.s.ts, ys: r.s.sp }, { name: 'PV (variável controlada)', xs: r.s.ts, ys: r.s.pv }], 0, T, { xl: 't (s)', yl: 'PV' }), g2 = plotSeries([{ name: 'MV (saída do controlador)', xs: r.s.ts, ys: r.s.mv }], 0, T, { xl: 't (s)', yl: 'MV' }); g1.texts.push(A.mkText(r.lines.slice(0, 3).join('   ·   '), 8, 480, 15, '#6b7280', { w: 560 })); putPlot(merge(g1, shiftRes(g2, 560)), c); CP.toast('Curvas do PID inseridas (PV em cima, saída embaixo).'); } },
+    { label: 'Inserir resumo (texto)', fn: function (v, c) { var r = run(v); c.close(); K.insertMono(['Sintonia PID'].concat([''], r.lines)); } }
+  ], 'Modelo do processo: G(s) = K·e<sup>−θs</sup> / (τs + 1). A malha é fechada com realimentação unitária e derivada sobre a medição.');
+  function run(v) {
+    ['K', 'tau', 'th', 'sp'].forEach(function (k) { if (!isFinite(v[k])) throw new Error('Preencha ' + k + '.'); }); if (!(v.tau > 0)) throw new Error('τ precisa ser maior que zero.'); if (v.th < 0) throw new Error('θ não pode ser negativo.'); if (v.K === 0) throw new Error('K não pode ser zero.');
+    var g;
+    if (v.m === 'man') { g = { Kp: v.kp, Ti: isFinite(v.ti) && v.ti > 0 ? v.ti : Infinity, Td: isFinite(v.td) ? v.td : 0 }; if (!isFinite(g.Kp)) throw new Error('Digite o Kp manual.'); }
+    else { if (v.m !== 'im' && !(v.th > 0)) throw new Error('Esse método precisa de θ maior que zero.'); if (v.m === 'im' && !(v.lam > 0)) throw new Error('λ precisa ser maior que zero.'); g = tune(v.m, v.t, v.K, v.tau, v.th, v.lam); }
+    var P = { K: v.K, tau: v.tau, th: v.th, Kp: g.Kp, Ti: g.Ti, Td: g.Td, sp: v.sp, T: 10 * (v.tau + v.th), sat: v.sat === '1' }, s = simPID(P), n = s.pv.length, ys = s.pv, yss = v.sp, pk = 0, i;
+    for (i = 1; i < n; i++) if (ys[i] > ys[pk]) pk = i;
+    var os = (ys[pk] - yss) / Math.abs(yss || 1) * 100, ls = 0; for (i = 0; i < n; i++) if (Math.abs(ys[i] - yss) > 0.02 * Math.abs(yss || 1)) ls = i;
+    var lines = ['Kp = ' + f(g.Kp, 5) + '   Ti = ' + (isFinite(g.Ti) ? f(g.Ti, 5) + ' s' : '∞ (sem integral)') + '   Td = ' + f(g.Td, 5) + ' s', 'Ki = ' + (isFinite(g.Ti) ? f(g.Kp / g.Ti, 5) : '0') + '   Kd = ' + f(g.Kp * g.Td, 5), '', 'Sobressinal: ' + f(Math.max(0, os), 4) + ' %', 'Tempo de acomodação (2 %): ' + (ls >= n - 3 ? 'maior que ' + f(P.T, 4) + ' s (não estabilizou)' : f(s.ts[ls + 1], 4) + ' s'), 'Erro final: ' + f(yss - ys[n - 1], 4)];
+    if (ys.some(function (y) { return !isFinite(y) || Math.abs(y) > 1e6 * Math.abs(yss || 1); })) lines.push('⚠ Malha instável com esses ganhos.');
+    return { lines: lines, s: s };
+  }
+}
+
+/* ---------- CSV ---------- */
+function parseCSV(text) {
+  var lines = String(text).replace(/\r/g, '').split('\n').filter(function (l) { return l.trim() !== ''; }); if (lines.length < 2) throw new Error('Preciso de pelo menos 2 linhas.');
+  var cand = [';', '\t', ',']; var dl = cand.filter(function (d) { return lines[0].indexOf(d) >= 0; })[0] || ';';
+  var rows = lines.map(function (l) { return l.split(dl).map(function (c) { return c.trim().replace(/^"|"$/g, ''); }); });
+  function nv(t) { if (t === '') return NaN; var s = t.replace(/\s/g, ''); if (dl !== ',' && /^-?\d+,\d+$/.test(s)) s = s.replace(',', '.'); return Number(s); }
+  var hasHead = rows[0].some(function (c) { return c !== '' && !isFinite(nv(c)) && isNaN(Date.parse(c)) && !/^\d{1,2}:\d{2}/.test(c); }), head = hasHead ? rows.shift() : rows[0].map(function (_, i) { return 'coluna ' + (i + 1); });
+  var cols = head.length, data = head.map(function () { return []; }), tcol = [];
+  rows.forEach(function (r) { for (var i = 0; i < cols; i++) { var t = r[i] == null ? '' : r[i], v = nv(t); data[i].push(v); } });
+  /* coluna de tempo/data: converte para segundos desde o início */
+  head.forEach(function (_, i) { var good = 0; if (data[i].filter(isFinite).length < rows.length * 0.5) { var secs = rows.map(function (r) { var t = r[i] || '', m = /^(\d{1,2}):(\d{2})(?::(\d{2}(?:[.,]\d+)?))?$/.exec(t); if (m) return +m[1] * 3600 + +m[2] * 60 + (m[3] ? +m[3].replace(',', '.') : 0); var d = Date.parse(t.replace(/^(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1').replace(' ', 'T')); return isFinite(d) ? d / 1000 : NaN; }); good = secs.filter(isFinite).length; if (good >= rows.length * 0.8) { var t0 = secs.filter(isFinite)[0]; data[i] = secs.map(function (x) { return x - t0; }); tcol[i] = true; } } });
+  return { head: head, data: data, time: tcol, n: rows.length };
+}
+function csvMenu() {
+  var parsed = null;
+  CP.ui.sheetMenu('<h3>Gráfico a partir de dados (CSV)</h3><p style="margin:0;color:var(--muted);font-size:13px;line-height:1.4">Escolha um arquivo .csv/.txt de um CLP, sensor ou planilha, ou cole os dados. Aceita ; , ou tabulação, vírgula decimal e colunas de hora (hh:mm:ss) ou data.</p><div style="display:flex;gap:8px"><button type="button" class="opt" id="vF" style="flex:1">Escolher arquivo</button><input id="vFile" type="file" accept=".csv,.txt,.tsv,text/csv,text/plain" style="display:none"></div><textarea id="vT" rows="4" placeholder="tempo;temperatura;pressao&#10;0;21,5;1,2&#10;1;22,0;1,3" style="width:100%;font:13px ui-monospace,Menlo,monospace"></textarea><div id="vC"></div><pre id="vM" style="margin:0;color:var(--danger);font-size:13px;white-space:pre-wrap"></pre><div class="btns"><button type="button" id="vX">Fechar</button><button type="button" id="vP">Ler dados</button><button type="button" class="ok" id="vI">Inserir gráfico</button></div>', function (h, close) {
+    var msg = h.querySelector('#vM'), area = h.querySelector('#vT'), cols = h.querySelector('#vC'), bx = h.querySelector('.box'); if (bx) { bx.style.maxHeight = '88vh'; bx.style.overflow = 'auto'; }
+    function read() { try { parsed = parseCSV(area.value); msg.textContent = ''; var opts = parsed.head.map(function (hh, i) { return '<option value="' + i + '">' + esc(hh) + '</option>'; }).join(''); cols.innerHTML = '<label style="display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--muted)">Eixo X<select id="vXc" style="min-height:44px;font-size:16px">' + opts + '</select></label><div style="font-size:13px;color:var(--muted);margin-top:6px">Curvas (até 6):</div>' + parsed.head.map(function (hh, i) { return '<label style="display:flex;gap:8px;align-items:center;min-height:36px"><input type="checkbox" data-y="' + i + '" style="min-height:0;width:20px;height:20px"' + (i > 0 ? ' checked' : '') + '> ' + esc(hh) + '</label>'; }).join('') + '<div style="font-size:13px;color:var(--muted)">' + parsed.n + ' linhas lidas.</div>'; } catch (e) { parsed = null; msg.textContent = e.message || 'Não consegui ler os dados.'; } }
+    h.querySelector('#vF').addEventListener('click', function () { h.querySelector('#vFile').click(); });
+    h.querySelector('#vFile').addEventListener('change', function (e) { var fl = e.target.files && e.target.files[0]; if (!fl) return; fl.text().then(function (t) { area.value = t.length > 2e6 ? t.slice(0, 2e6) : t; read(); }); });
+    h.querySelector('#vP').addEventListener('click', read); h.querySelector('#vX').addEventListener('click', close);
+    h.querySelector('#vI').addEventListener('click', function () {
+      if (!parsed) read(); if (!parsed) return; var xi = +h.querySelector('#vXc').value, ys = CP.$$('[data-y]', h).filter(function (c) { return c.checked && +c.getAttribute('data-y') !== xi; }).map(function (c) { return +c.getAttribute('data-y'); }).slice(0, 6); if (!ys.length) { msg.textContent = 'Marque pelo menos uma curva.'; return; }
+      var X = parsed.data[xi], idx = []; X.forEach(function (x, i) { if (isFinite(x)) idx.push(i); }); if (idx.length < 2) { msg.textContent = 'A coluna X precisa de números (ou horas/datas).'; return; }
+      idx.sort(function (a, b) { return X[a] - X[b]; }); var xs = idx.map(function (i) { return X[i]; }), series = ys.map(function (c) { return { name: parsed.head[c], xs: xs, ys: idx.map(function (i) { return parsed.data[c][i]; }) }; }).filter(function (s) { return s.ys.some(isFinite); });
+      if (!series.length) { msg.textContent = 'As colunas escolhidas não têm números.'; return; }
+      var xl = parsed.time[xi] ? 't (s)' : parsed.head[xi], res = plotSeries(series, xs[0], xs[xs.length - 1] === xs[0] ? xs[0] + 1 : xs[xs.length - 1], { xl: String(xl).slice(0, 18), yl: '' });
+      var st = series.map(function (s) { var v = s.ys.filter(isFinite), mn = Math.min.apply(null, v), mxx = Math.max.apply(null, v), av = v.reduce(function (a, b) { return a + b; }, 0) / v.length; return s.name + ': mín ' + f(mn, 4) + ' · máx ' + f(mxx, 4) + ' · média ' + f(av, 4); });
+      st.forEach(function (t, i) { res.texts.push(A.mkText(t, 8, 480 + i * 22, 15, '#6b7280', { w: 560 })); });
+      close(); A.placeAt(res.items, res.texts); CP.toast('Gráfico dos dados inserido (' + idx.length + ' pontos).');
+    });
+  });
+}
+
+CP.controlMenu = function () {
+  CP.ui.sheetMenu('<h3>Controle e dados</h3><button type="button" class="opt" data-a="tf">Função de transferência: degrau, Bode, polos e zeros</button><button type="button" class="opt" data-a="pid">Simulador de PID e sintonia (ZN, Cohen-Coon, Lambda)</button><button type="button" class="opt" data-a="csv">Gráfico de dados (CSV de CLP ou sensor)</button><button type="button" class="opt" id="ctX">Fechar</button>', function (h, close) {
+    h.querySelector('#ctX').addEventListener('click', close);
+    CP.$$('[data-a]', h).forEach(function (b) { b.addEventListener('click', function () { close(); ({ tf: tfMenu, pid: pidMenu, csv: csvMenu })[b.getAttribute('data-a')](); }); });
+  });
+};
+CP.ctrlApi = { parsePoly: parsePoly, roots: roots, stepOf: stepOf, bodeData: bodeData, margins: margins, tune: tune, simPID: simPID, parseCSV: parseCSV, tfLines: tfLines };
+})();
+(function () {
+'use strict';
+/* Campo e documentação: tabelas com fórmulas/CSV, modelos de engenharia, consulta rápida offline,
+   foto com data, exportação SVG/DXF e o menu "Engenharia". */
+var CP = window.CP, $ = CP.$, S = CP.S, E = CP.engine, A = CP.mathApi, O = CP.objs, K = CP.calcApi;
+var f = K.f, num = K.num, esc = CP.esc;
+function note() { return CP.cur(); }
+
+/* ================= tabelas com fórmulas ================= */
+function colIdx(L) { var n = 0, i; L = L.toUpperCase(); for (i = 0; i < L.length; i++) n = n * 26 + (L.charCodeAt(i) - 64); return n - 1; }
+function colName(i) { var s = ''; i++; while (i > 0) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
+function cellNum(o, r, c, stack) {
+  if (r < 0 || c < 0 || r >= o.rows.length || c >= o.rows[0].length) return null;
+  var key = r + ',' + c;
+  if (o.fx && o.fx[key]) { if (stack.indexOf(key) >= 0) throw new Error('#CIRC'); stack.push(key); var v = evalF(o, o.fx[key], stack); stack.pop(); return v; }
+  var t = String(o.rows[r][c] == null ? '' : o.rows[r][c]).trim(); if (t === '') return null; var n = num(t.replace(/%$/, '')); return isFinite(n) ? n : null;
+}
+var FN = {
+  SOMA: 'SUM', SUM: 'SUM', MEDIA: 'AVG', MÉDIA: 'AVG', AVG: 'AVG', AVERAGE: 'AVG', MIN: 'MIN', MAX: 'MAX', MÍN: 'MIN', MÁX: 'MAX', CONT: 'CNT', COUNT: 'CNT', RAIZ: 'SQRT', SQRT: 'SQRT', ABS: 'ABS', ARRED: 'ROUND', ROUND: 'ROUND'
+};
+var FF = {
+  SUM: function () { return flat(arguments).reduce(function (a, b) { return a + b; }, 0); },
+  AVG: function () { var x = flat(arguments); if (!x.length) throw new Error('#DIV/0'); return x.reduce(function (a, b) { return a + b; }, 0) / x.length; },
+  MIN: function () { var x = flat(arguments); return x.length ? Math.min.apply(null, x) : 0; }, MAX: function () { var x = flat(arguments); return x.length ? Math.max.apply(null, x) : 0; },
+  CNT: function () { return flat(arguments).length; }, SQRT: function (x) { return Math.sqrt(x); }, ABS: function (x) { return Math.abs(x); }, ROUND: function (x, d) { var p = Math.pow(10, d || 0); return Math.round(x * p) / p; }
+};
+function flat(a) { var o = []; Array.prototype.forEach.call(a, function (x) { if (Array.isArray(x)) x.forEach(function (y) { if (y != null) o.push(y); }); else if (x != null) o.push(x); }); return o; }
+function evalF(o, formula, stack) {
+  var s = String(formula).replace(/^\s*=/, ''), re = /\s*(?:(\d+(?:[.,]\d+)?)|([A-Za-z]{1,2}\d{1,3}:[A-Za-z]{1,2}\d{1,3})|([A-Za-z]{1,2}\d{1,3})(?![A-Za-zÀ-ÿ(])|([A-Za-zÀ-ÿ]+)(?=\s*\()|([-+*/^(),;%]))/y, js = '', m, last = 0;
+  re.lastIndex = 0;
+  while (re.lastIndex < s.length && (m = re.exec(s))) {
+    last = re.lastIndex;
+    if (m[1] != null) js += m[1].replace(',', '.');
+    else if (m[2]) { var q = m[2].split(':'), a = /^([A-Za-z]+)(\d+)$/.exec(q[0]), b = /^([A-Za-z]+)(\d+)$/.exec(q[1]); js += 'R(' + (a[2] - 1) + ',' + colIdx(a[1]) + ',' + (b[2] - 1) + ',' + colIdx(b[1]) + ')'; }
+    else if (m[3]) { var c = /^([A-Za-z]+)(\d+)$/.exec(m[3]); js += 'V(' + (c[2] - 1) + ',' + colIdx(c[1]) + ')'; }
+    else if (m[4]) { var nm = FN[m[4].toUpperCase()]; if (!nm) throw new Error('#NOME?'); js += 'F.' + nm; }
+    else if (m[5]) js += m[5] === '^' ? '**' : m[5] === ';' ? ',' : m[5] === '%' ? '/100' : m[5];
+  }
+  if (/\S/.test(s.slice(last))) throw new Error('#ERRO');
+  var V = function (r, c) { var v = cellNum(o, r, c, stack); return v == null ? 0 : v; }, R = function (r0, c0, r1, c1) { var out = [], r, c; for (r = Math.min(r0, r1); r <= Math.max(r0, r1); r++) for (c = Math.min(c0, c1); c <= Math.max(c0, c1); c++) { var v = cellNum(o, r, c, stack); if (v != null) out.push(v); } return out; };
+  var v2; try { v2 = new Function('V', 'R', 'F', '"use strict";return (' + js + ');')(V, R, FF); } catch (e) { if (/^#/.test(e.message)) throw e; throw new Error('#ERRO'); }
+  if (Array.isArray(v2)) v2 = v2[0]; if (!isFinite(v2)) throw new Error('#DIV/0'); return v2;
+}
+function recalc(o, tableEl, skipTd) {
+  if (!o.fx) return; var keys = Object.keys(o.fx), tbl = tableEl && tableEl.rows ? tableEl : null;
+  keys.forEach(function (k) {
+    var rc = k.split(',').map(Number), r = rc[0], c = rc[1], txt;
+    if (r >= o.rows.length || c >= o.rows[0].length) { delete o.fx[k]; return; }
+    try { txt = f(evalF(o, o.fx[k], [k]), 8); } catch (e) { txt = /^#/.test(e.message) ? e.message : '#ERRO'; }
+    o.rows[r][c] = txt;
+    if (tbl && tbl.rows[r] && tbl.rows[r].cells[c] && tbl.rows[r].cells[c] !== skipTd) tbl.rows[r].cells[c].textContent = txt;
+  });
+}
+O.cellFocus = function (o, r, c, td) { var k = r + ',' + c; if (o.fx && o.fx[k] && td.textContent.trim() !== o.fx[k]) td.textContent = o.fx[k]; };
+O.cellBlur = function (o, r, c, td, tbl) {
+  var k = r + ',' + c, t = String(td.innerText || td.textContent || '').trim();
+  if (/^=/.test(t) && t.length > 1) { o.fx = o.fx || {}; o.fx[k] = t; } else if (o.fx && o.fx[k]) { delete o.fx[k]; if (!Object.keys(o.fx).length) delete o.fx; }
+  o.rows[r][c] = t; recalc(o, tbl, null); if (o.fx && o.fx[k]) td.textContent = o.rows[r][c]; CP.queueSave(note());
+};
+function addTotals(o) {
+  var cols = o.rows[0].length, row = [], fx = o.fx || {}, r = o.rows.length, ci;
+  for (ci = 0; ci < cols; ci++) { var nums = 0, tot = 0; for (var i = (o.header ? 1 : 0); i < o.rows.length; i++) { var v = cellNum(o, i, ci, []); if (v != null) nums++; tot++; } row.push(''); if (ci > 0 && nums >= Math.max(1, tot / 2)) { fx[r + ',' + ci] = '=SOMA(' + colName(ci) + (o.header ? 2 : 1) + ':' + colName(ci) + r + ')'; } }
+  row[0] = 'Total'; o.rows.push(row); if (o.rhs) o.rhs.push(o.rhs[o.rhs.length - 1]); o.fx = fx; recalc(o, null, null); O.place(); O.save(); CP.toast('Linha de total criada com =SOMA nas colunas numéricas.');
+}
+function tableCSV(o) { return '﻿' + o.rows.map(function (row) { return row.map(function (c) { var t = String(c == null ? '' : c).replace(/\r?\n/g, ' '); return /[;"]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }).join(';'); }).join('\r\n'); }
+function exportTable(o) { var name = 'tabela-' + new Date().toISOString().slice(0, 10) + '.csv'; CP.saveBlob(name, new Blob([tableCSV(o)], { type: 'text/csv;charset=utf-8' })).then(null, function () { CP.toast('Não foi possível salvar o CSV.'); }); }
+O.tableExtra = function (o, tb) {
+  [['Σ Total', function () { addTotals(o); }], ['CSV ↓', function () { exportTable(o); }], ['ƒx Ajuda', function () { CP.ui.sheetMenu('<h3>Fórmulas nas tabelas</h3><p style="margin:0;line-height:1.5;font-size:15px">Digite numa célula, começando com <b>=</b>:<br>• <b>=SOMA(B2:B6)</b> soma · <b>=MEDIA(B2:B6)</b> média<br>• <b>=MIN(…)</b> · <b>=MAX(…)</b> · <b>=CONT(…)</b><br>• <b>=B2*C2</b>, <b>=(B2+B3)/2</b>, <b>=RAIZ(B2)</b><br>As colunas são A, B, C… e as linhas 1, 2, 3… (a linha de cabeçalho é a 1). Ao tocar na célula você vê a fórmula; ao sair, ela mostra o resultado e tudo recalcula sozinho.</p><button type="button" class="opt" id="fxX">Entendi</button>', function (h, close) { h.querySelector('#fxX').addEventListener('click', close); }); }]].forEach(function (b) {
+    var bt = document.createElement('button'); bt.type = 'button'; bt.textContent = b[0]; bt.addEventListener('pointerdown', function (e) { e.preventDefault(); }); bt.addEventListener('click', b[1]); tb.appendChild(bt);
+  });
+};
+function importCSV(file) {
+  file.text().then(function (txt) {
+    var lines = txt.replace(/^﻿/, '').replace(/\r/g, '').split('\n').filter(function (l) { return l.trim() !== ''; }); if (!lines.length) throw new Error();
+    var dl = [';', '\t', ','].filter(function (d) { return lines[0].indexOf(d) >= 0; })[0] || ';', rows = lines.slice(0, 80).map(function (l) { return l.split(dl).map(function (c) { return c.trim().replace(/^"|"$/g, '').replace(/""/g, '"'); }).slice(0, 12); }), cols = Math.max.apply(null, rows.map(function (r) { return r.length; }));
+    rows = rows.map(function (r) { while (r.length < cols) r.push(''); return r; });
+    var o = { id: CP.uid(), type: 'table', x: 60, y: Math.max(60, O.nearest()), w: Math.min(900, 150 * cols + 40), rows: rows, fs: cols > 6 ? 20 : 24, header: true };
+    O.list().push(o); O.place(); O.save(); CP.toast('Tabela criada com ' + rows.length + ' linhas e ' + cols + ' colunas.');
+  }).catch(function () { CP.toast('Não consegui ler esse arquivo CSV.'); });
+}
+function pickCSV() { var i = document.createElement('input'); i.type = 'file'; i.accept = '.csv,.txt,.tsv,text/csv,text/plain'; i.addEventListener('change', function () { if (i.files && i.files[0]) importCSV(i.files[0]); }); i.click(); }
+
+/* ================= modelos de engenharia ================= */
+function tx(x, y, text, size, w) { return { id: CP.uid(), x: x, y: y, w: w || 840, size: size || 28, c: '#14171c', text: text }; }
+function tbl(x, y, w, rows, fs) { return { id: CP.uid(), type: 'table', x: x, y: y, w: w, rows: rows, fs: fs || 22, header: true }; }
+function blank(r, c) { var a = []; for (var i = 0; i < r; i++) { var row = []; for (var j = 0; j < c; j++) row.push(''); a.push(row); } return a; }
+CP.templates.push(
+  ['Eng.: Lista de I/O (CLP)', function (n) { n.paper = 'plain'; n.title = 'Lista de I/O — '; n.texts = [tx(60, 40, 'Lista de I/O', 44, 600), tx(60, 110, 'Projeto:                      CLP:                      Rev.:', 26)]; n.objs = [tbl(40, 180, 920, [['TAG', 'Descrição', 'Tipo', 'Endereço', 'Cartão/Canal', 'Sinal', 'Obs.']].concat(blank(16, 7)), 19)]; }],
+  ['Eng.: Loop check de instrumento', function (n) { n.paper = 'plain'; n.title = 'Loop check — '; n.texts = [tx(60, 40, 'Loop check', 44, 600), tx(60, 110, 'TAG:                    Serviço:', 26), tx(60, 160, 'Faixa:                  Sinal:                  Data:                  Executor:', 26), tx(60, 560, 'Alarmes e intertravamentos', 30)]; n.objs = [tbl(60, 230, 880, [['Ponto', 'Sinal simulado', 'Leitura esperada', 'Leitura no CLP/IHM', 'OK'], ['0 %', '', '', '', ''], ['25 %', '', '', '', ''], ['50 %', '', '', '', ''], ['75 %', '', '', '', ''], ['100 %', '', '', '', '']], 22), tbl(60, 620, 880, [['Evento', 'Setpoint', 'Atuou?', 'Obs.'], ['Alarme baixo (L)', '', '', ''], ['Alarme alto (H)', '', '', ''], ['Intertravamento', '', '', '']], 22)]; }],
+  ['Eng.: FAT / SAT (teste de aceitação)', function (n) { n.paper = 'plain'; n.title = 'FAT-SAT — '; n.texts = [tx(60, 40, 'Teste de aceitação (FAT / SAT)', 40, 800), tx(60, 110, 'Projeto:                         Cliente:', 26), tx(60, 160, 'Data:                            Responsável:', 26)]; n.objs = [tbl(40, 230, 920, [['Item', 'Teste', 'Critério de aceitação', 'Resultado', 'OK/NOK', 'Visto']].concat(blank(14, 6)), 20)]; }],
+  ['Eng.: Relatório de manutenção', function (n) { n.paper = 'plain'; n.title = 'Manutenção — '; n.texts = [tx(60, 40, 'Relatório de manutenção', 42, 800), tx(60, 110, 'Equipamento / TAG:', 26), tx(60, 160, 'Data:                    Executor:                    Tipo:  ☐ preventiva  ☐ corretiva', 24), tx(60, 230, 'Problema encontrado:', 28), tx(60, 520, 'Causa:', 28), tx(60, 700, 'Ação realizada:', 28), tx(60, 960, 'Peças e materiais', 28)]; n.objs = [tbl(60, 1010, 880, [['Item', 'Qtd', 'Código / Obs.']].concat(blank(4, 3)), 22)]; }],
+  ['Eng.: Checklist de partida', function (n) { n.paper = 'plain'; n.title = 'Partida — '; n.texts = [tx(60, 40, 'Checklist de partida', 42, 800), tx(60, 110, 'Equipamento / painel:                       Data:', 26)]; n.objs = [tbl(60, 180, 880, [['Item', 'Verificação', 'OK', 'Obs.'], ['1', 'Alimentação e tensões conferidas', '', ''], ['2', 'Aterramento (PE) conferido', '', ''], ['3', 'Torque dos bornes e conexões', '', ''], ['4', 'Sentido de giro dos motores', '', ''], ['5', 'Parada de emergência testada', '', ''], ['6', 'Intertravamentos testados', '', ''], ['7', 'Entradas e saídas simuladas', '', ''], ['8', 'Parâmetros do inversor / CLP salvos', '', ''], ['9', 'Backup do programa realizado', '', ''], ['10', '', '', ''], ['11', '', '', '']], 24)]; }]
+);
+
+/* ================= consulta rápida ================= */
+var REF = [
+  ['Letras ISA 5.1 (TAGs)', ['1ª letra (variável medida):', '  A Análise      B Chama       C Condutividade', '  D Densidade    E Tensão      F Vazão', '  H Manual       I Corrente    J Potência', '  K Tempo        L Nível       M Umidade', '  P Pressão      Q Quantidade  R Radiação', '  S Velocidade   T Temperatura U Multivariável', '  V Vibração     W Peso/Força  Y Evento/estado', '  Z Posição', '', 'Letras seguintes (função):', '  A Alarme       C Controlador E Elemento primário', '  G Visor        H Alto        I Indicador', '  K Estação      L Baixo/luz   M Médio', '  R Registrador  S Chave       T Transmissor', '  V Válvula      W Poço        Y Relé/conversor', '  Z Elemento final de controle', '', 'Exemplos: FT-101 transmissor de vazão · PIC-203 indicador-', 'controlador de pressão · LSH-305 chave de nível alto ·', 'TE-410 elemento de temperatura · FV-102 válvula de vazão.']],
+  ['Grau de proteção IP (IEC 60529)', ['IP + 1º dígito (sólidos) + 2º dígito (líquidos)', '', '1º dígito:', '  0 sem proteção      1 objetos ≥ 50 mm', '  2 objetos ≥ 12,5 mm 3 objetos ≥ 2,5 mm', '  4 objetos ≥ 1 mm    5 protegido contra poeira', '  6 totalmente estanque a poeira', '', '2º dígito:', '  0 sem proteção      1 gotas verticais', '  2 gotas com 15° de inclinação', '  3 chuva (spray) até 60°', '  4 projeção de água em qualquer direção', '  5 jatos de água (bico de 6,3 mm)', '  6 jatos potentes (bico de 12,5 mm)', '  7 imersão temporária (até 1 m, 30 min)', '  8 imersão contínua (condição do fabricante)', '  9 jato de alta pressão e temperatura (IP69)', '', 'Ex.: IP54 poeira limitada e projeção de água · IP65 estanque', 'a poeira e jatos · IP67 estanque e imersão temporária.']],
+  ['Tipos de invólucro NEMA (resumo)', ['  1    uso interno geral', '  3R   chuva e gelo (externo), sem estanqueidade total', '  4    estanque a água e poeira (externo, lavagem)', '  4X   igual ao 4 com resistência à corrosão', '  12   uso industrial interno: poeira e gotejamento', '  13   interno: poeira, gotejamento e óleo', '', 'NEMA e IP não são equivalências exatas: consulte a norma', 'ou o fabricante antes de substituir um pelo outro.']],
+  ['Cores de condutores e comando', ['Condutores (NBR 5410):', '  Neutro: azul-claro', '  Proteção PE: verde-amarelo (ou verde)', '  Fases: demais cores (comum: preto, vermelho, branco)', '', 'Circuitos de máquina (IEC 60204-1):', '  Potência CA/CC: preto', '  Comando CA: vermelho', '  Comando CC: azul escuro', '  Intertravamento com alimentação externa: laranja', '  Neutro: azul-claro · PE: verde-amarelo', '', 'Código de cores IEC 60757:', '  BK preto  BN marrom  RD vermelho  OG laranja', '  YE amarelo  GN verde  BU azul  VT violeta', '  GY cinza  WH branco  PK rosa  TQ turquesa', '  GNYE verde-amarelo']],
+  ['AWG × mm²', ['  AWG   mm²       AWG   mm²', '  4/0   107,2     14    2,08', '  2/0    67,4     16    1,31', '  1/0    53,5     18    0,823', '  1      42,4     20    0,518', '  2      33,6     22    0,326', '  4      21,2     24    0,205', '  6      13,3     26    0,129', '  8      8,37     28    0,081', '  10     5,26', '  12     3,31', '', 'Seções métricas comuns: 0,5 · 0,75 · 1 · 1,5 · 2,5 · 4 · 6 ·', '10 · 16 · 25 · 35 · 50 · 70 · 95 · 120 mm².']],
+  ['Sinais e sensores padrão', ['Sinais analógicos:', '  4–20 mA (HART sobreposto)  0–20 mA', '  0–10 V   1–5 V   3–15 psi (0,2–1,0 bar)', '  Falha 4–20 mA (NAMUR NE43): < 3,6 mA ou > 21 mA', '', 'Temperatura:', '  Pt100: 100 Ω a 0 °C · 138,5 Ω a 100 °C (α = 0,00385)', '  Termopar J: Fe / Constantan (uso até ≈ 750 °C)', '  Termopar K: Ni-Cr / Ni-Al (uso até ≈ 1200 °C)', '  Termopar T: Cu / Constantan (−200 a 350 °C)', '', 'Tensões usuais: comando 24 Vcc, 110/220 Vca · motores 220/380/440 V.']],
+  ['Funções ANSI de proteção', ['  27 subtensão         59 sobretensão', '  50 sobrecorrente instantânea', '  51 sobrecorrente temporizada', '  46 desequilíbrio de corrente', '  47 sequência de fase', '  49 sobrecarga térmica', '  81 frequência', '  86 relé de bloqueio', '  87 proteção diferencial']]
+];
+CP.refMenu = function () {
+  CP.ui.sheetMenu('<h3>Consulta rápida (sem internet)</h3><div id="rfC" style="display:flex;flex-wrap:wrap;gap:6px">' + REF.map(function (r, i) { return '<button type="button" class="chip" data-r="' + i + '">' + esc(r[0]) + '</button>'; }).join('') + '</div><pre id="rfT" style="margin:6px 0 0;padding:10px;border-radius:12px;background:var(--panel-2);font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;max-height:42vh;overflow:auto;user-select:text;-webkit-user-select:text">Escolha um assunto.</pre><div class="btns"><button type="button" id="rfX">Fechar</button><button type="button" class="ok" id="rfI">Inserir na nota</button></div>', function (h, close) {
+    var cur = -1, bx = h.querySelector('.box'); if (bx) { bx.style.maxHeight = '88vh'; bx.style.overflow = 'auto'; }
+    CP.$$('[data-r]', h).forEach(function (b) { b.addEventListener('click', function () { cur = +b.getAttribute('data-r'); CP.$$('[data-r]', h).forEach(function (x) { x.classList.toggle('on', x === b); }); h.querySelector('#rfT').textContent = REF[cur][1].join('\n'); }); });
+    h.querySelector('#rfX').addEventListener('click', close);
+    h.querySelector('#rfI').addEventListener('click', function () { if (cur < 0) { CP.toast('Escolha um assunto.'); return; } close(); K.insertMono([REF[cur][0], ''].concat(REF[cur][1])); });
+  });
+};
+
+/* ================= foto com data ================= */
+function photo(cap) {
+  var i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; if (cap) i.setAttribute('capture', 'environment');
+  i.addEventListener('change', function () {
+    var fl = i.files && i.files[0]; if (!fl) return;
+    O.addImage(fl).then(function () {
+      var lst = O.list(), o = lst[lst.length - 1], n = note(); if (!o || o.type !== 'img') return;
+      var d = new Date(), t = (d.getDate() < 10 ? '0' : '') + d.getDate() + '/' + (d.getMonth() < 9 ? '0' : '') + (d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes();
+      var tx0 = { id: CP.uid(), x: o.x, y: o.y + o.h + 8, w: 460, size: 20, c: '#6b7280', text: 'Foto · ' + t }; n.texts.push(tx0); E.push({ t: 'tadd', tx: tx0 }); if (E.placeTexts) E.placeTexts(); CP.queueSave(n);
+      CP.toast('Foto inserida com data e hora. Desenhe por cima com a caneta para anotar.');
+    });
+  });
+  i.click();
+}
+
+/* ================= exportar SVG / DXF ================= */
+function cadData() {
+  var n = note(), k = n.cal && n.cal.k > 0 ? n.cal.k : 0.21, H = n.pages * CP.PAGE_H, W = CP.PAGE_W;
+  return { n: n, k: k, W: W, H: H };
+}
+function dxfAci(hex) {
+  var base = [[1, 255, 0, 0], [2, 255, 255, 0], [3, 0, 160, 0], [4, 0, 200, 220], [5, 0, 0, 255], [6, 255, 0, 255], [7, 0, 0, 0], [8, 128, 128, 128]], m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '#000000') || [0, '00', '00', '00'], r = parseInt(m[1], 16), g = parseInt(m[2], 16), b = parseInt(m[3], 16), best = 7, bd = 1e9;
+  base.forEach(function (c) { var d = (c[1] - r) * (c[1] - r) + (c[2] - g) * (c[2] - g) + (c[3] - b) * (c[3] - b); if (d < bd) { bd = d; best = c[0]; } }); return best;
+}
+function exportSVG() {
+  var D = cadData(), n = D.n, out = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + D.W + ' ' + D.H + '" width="' + (D.W * 0.21).toFixed(1) + 'mm" height="' + (D.H * 0.21).toFixed(1) + 'mm" fill="none" stroke-linecap="round" stroke-linejoin="round">'];
+  n.strokes.forEach(function (s) { var d = s.d, p = '', i; for (i = 0; i < d.length; i += 3) p += (i ? 'L' : 'M') + (Math.round(d[i] * 10) / 10) + ' ' + (Math.round(d[i + 1] * 10) / 10); out.push('<path d="' + p + '" stroke="' + (s.c || '#000') + '" stroke-width="' + (s.w || 3) + '"' + (s.k === 'h' ? ' stroke-opacity="0.35"' : '') + '/>'); });
+  n.texts.forEach(function (t) { String(t.text || '').split('\n').forEach(function (ln, i) { out.push('<text x="' + t.x + '" y="' + Math.round(t.y + t.size * (1.05 + i * 1.3)) + '" font-size="' + t.size + '" fill="' + (t.c || '#000') + '" stroke="none" font-family="' + (t.mono ? 'monospace' : 'sans-serif') + '" xml:space="preserve">' + ln.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</text>'); }); });
+  out.push('</svg>'); return new Blob([out.join('\n')], { type: 'image/svg+xml' });
+}
+function exportDXF() {
+  var D = cadData(), n = D.n, k = D.k, L = [];
+  function g(c, v) { L.push(String(c), String(v)); }
+  g(0, 'SECTION'); g(2, 'HEADER'); g(9, '$ACADVER'); g(1, 'AC1009'); g(9, '$INSUNITS'); g(70, 4); g(9, '$DWGCODEPAGE'); g(3, 'ANSI_1252'); g(0, 'ENDSEC');
+  g(0, 'SECTION'); g(2, 'TABLES'); g(0, 'TABLE'); g(2, 'LAYER'); g(70, 2); g(0, 'LAYER'); g(2, 'TRACOS'); g(70, 0); g(62, 7); g(6, 'CONTINUOUS'); g(0, 'LAYER'); g(2, 'TEXTOS'); g(70, 0); g(62, 3); g(6, 'CONTINUOUS'); g(0, 'ENDTAB'); g(0, 'ENDSEC');
+  g(0, 'SECTION'); g(2, 'ENTITIES');
+  n.strokes.forEach(function (s) {
+    var d = s.d, pts = [], i, lx = null, ly = null; for (i = 0; i < d.length; i += 3) { var x = d[i], y = d[i + 1]; if (lx !== null && Math.hypot(x - lx, y - ly) < 2.5 && i < d.length - 3) continue; pts.push([x, y]); lx = x; ly = y; }
+    if (pts.length < 2) return; g(0, 'POLYLINE'); g(8, 'TRACOS'); g(62, dxfAci(s.c)); g(66, 1); g(70, 0);
+    pts.forEach(function (q) { g(0, 'VERTEX'); g(8, 'TRACOS'); g(10, (q[0] * k).toFixed(3)); g(20, (-q[1] * k).toFixed(3)); g(30, 0); }); g(0, 'SEQEND'); g(8, 'TRACOS');
+  });
+  n.texts.forEach(function (t) { String(t.text || '').split('\n').forEach(function (ln, i) { if (!ln.trim()) return; g(0, 'TEXT'); g(8, 'TEXTOS'); g(62, dxfAci(t.c)); g(10, (t.x * k).toFixed(3)); g(20, (-(t.y + t.size * (1.05 + i * 1.3)) * k).toFixed(3)); g(30, 0); g(40, (t.size * 0.8 * k).toFixed(3)); g(1, ln); }); });
+  g(0, 'ENDSEC'); g(0, 'EOF');
+  var txt = L.join('\r\n') + '\r\n', u = new Uint8Array(txt.length), i; for (i = 0; i < txt.length; i++) { var c = txt.charCodeAt(i); u[i] = c < 256 ? c : 63; }
+  return new Blob([u], { type: 'application/dxf' });
+}
+function exportCad(kind) {
+  var n = note(); if (!n) return; var nm = (String(n.title || 'nota').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'nota'), blob = kind === 'svg' ? exportSVG() : exportDXF();
+  CP.saveBlob(nm + '.' + kind, blob).then(function () { if (kind === 'dxf') CP.toast(n.cal ? 'DXF em milímetros reais (escala calibrada).' : 'DXF em milímetros do papel. Calibre a escala em “Medir em escala” para sair em tamanho real.'); }, function () { CP.toast('Não foi possível salvar o arquivo.'); });
+}
+CP.exportCad = exportCad;
+
+/* ================= menu Engenharia ================= */
+CP.engMenu = function () {
+  var gs = S.gridSnap ? 'ligada' : 'desligada';
+  CP.ui.sheetMenu('<h3>Engenharia e automação</h3>' +
+    '<div style="font-weight:700;margin:4px 0 2px">Desenhar</div>' +
+    '<button type="button" class="opt" data-a="sym">Símbolos: ladder, P&amp;ID, pneumática, elétrica, lógica</button><button type="button" class="opt" data-a="conn">Conectar símbolos (a ligação acompanha)</button><button type="button" class="opt" data-a="snap">Grade magnética: ' + gs + ' (tocar para trocar)</button><button type="button" class="opt" data-a="mark">Balões, nuvem de revisão e carimbos</button><button type="button" class="opt" data-a="meas">Medir em escala (distância, cabo, área)</button>' +
+    '<div style="font-weight:700;margin:8px 0 2px">Calcular</div>' +
+    '<button type="button" class="opt" data-a="calc">Calculadoras (4–20 mA, unidades, elétrica, Modbus, booleana)</button><button type="button" class="opt" data-a="ctrl">Controle: Bode, degrau, PID e gráfico de CSV</button><button type="button" class="opt" data-a="ref">Consulta rápida (ISA, IP, NEMA, AWG, cores)</button>' +
+    '<div style="font-weight:700;margin:8px 0 2px">Documentar</div>' +
+    '<button type="button" class="opt" data-a="imp">Importar CSV como tabela</button><button type="button" class="opt" data-a="cam">Foto da câmera com data</button><button type="button" class="opt" data-a="svg">Exportar desenho em SVG</button><button type="button" class="opt" data-a="dxf">Exportar desenho em DXF (AutoCAD)</button><p style="margin:2px 0 0;color:var(--muted);font-size:13px">Modelos de I/O, loop check, FAT/SAT, manutenção e partida: Ferramentas → Modelos.</p><button type="button" class="opt" id="enX">Fechar</button>', function (h, close) {
+    var bx = h.querySelector('.box'); if (bx) { bx.style.maxHeight = '88vh'; bx.style.overflow = 'auto'; }
+    h.querySelector('#enX').addEventListener('click', close);
+    CP.$$('[data-a]', h).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var a = b.getAttribute('data-a');
+        if (a === 'cam') { close(); photo(true); return; } if (a === 'imp') { close(); pickCSV(); return; }
+        close(); ({ sym: function () { CP.shapesMenu('Ladder (CLP)'); }, conn: function () { CP.conn.start(); }, snap: function () { CP.toggleGridSnap(); }, mark: function () { CP.marksMenu(); }, meas: function () { CP.measureMenu(); }, calc: function () { CP.calcMenu(); }, ctrl: function () { CP.controlMenu(); }, ref: function () { CP.refMenu(); }, svg: function () { exportCad('svg'); }, dxf: function () { exportCad('dxf'); } })[a]();
+      });
+    });
+  });
+};
+CP.fieldApi = { evalF: evalF, recalc: recalc, importCSV: importCSV, tableCSV: tableCSV, exportSVG: exportSVG, exportDXF: exportDXF, addTotals: addTotals, photo: photo };
+})();
+(function () {
+'use strict';
+/* Personalizar: esconder e reordenar os botões da barra de baixo e do painel de Ferramentas.
+   A escolha fica salva no aparelho (S.custom = { hide:[...], dock:{grupo:[...]}, tools:[...] }). */
+var CP = window.CP, $ = CP.$, S = CP.S, esc = CP.esc;
+S.custom = S.custom || { hide: [], dock: {}, tools: [] };
+
+var DOCK = [
+  ['pen', 'Caneta', 'pen', 'A'], ['hl', 'Marca-texto', 'hl', 'A'], ['eraser', 'Borracha', 'eraser', 'A'], ['text', 'Texto', 'type', 'A'], ['select', 'Selecionar objetos', 'cursor', 'A'], ['lasso', 'Laço', 'lasso', 'A'],
+  ['colors', 'Cores rápidas', 'paper', 'B'], ['curcol', 'Cor e espessura', 'paper', 'B'],
+  ['tools', 'Ferramentas (fixo)', 'tools', 'C'], ['insert', 'Inserir (+)', 'plus', 'C'], ['paper', 'Papel e entrada', 'paper', 'C']
+];
+var TOOLS = [
+  ['web', 'Navegador', 'globe'], ['shapes', 'Formas', 'shapes'], ['eng', 'Engenharia', 'tools'], ['solve', 'Resolver', 'calc'], ['auto', 'Auto-resolver', 'calc'], ['graph', 'Gráfico', 'chart'], ['ruler', 'Régua', 'ruler'], ['proto', 'Transferidor', 'angle'],
+  ['pages', 'Páginas', 'all'], ['layers', 'Camadas', 'layers'], ['rec', 'Gravar áudio', 'mic'], ['listen', 'Ouvir áudio', 'play'], ['pdf', 'Importar PDF', 'pdf'], ['tmpl', 'Modelos', 'copy'], ['tags', 'Etiquetas', 'tag'], ['zoom', 'Zoom', 'zoom'], ['open', 'Abrir nota', 'file'], ['diag', 'Diagnóstico', 'tools'], ['update', 'Atualizar app', 'pdf']
+];
+CP.TOOL_KEYS = TOOLS.map(function (t) { return t[0]; });
+function C() { var c = S.custom; if (!c || typeof c !== 'object') c = S.custom = { hide: [], dock: {}, tools: [] }; c.hide = c.hide || []; c.dock = c.dock || {}; c.tools = c.tools || []; return c; }
+function hidden(k) { return C().hide.indexOf(k) >= 0; }
+function elOf(k) {
+  if (k === 'colors') return $('#dockColors'); if (k === 'curcol') return $('#curCol'); if (k === 'tools') return $('#btnTools'); if (k === 'insert') return $('#btnInsert'); if (k === 'paper') return $('#btnPaper');
+  return document.querySelector('#dock [data-tool="' + k + '"]');
+}
+function groupKeys(g) {
+  var base = DOCK.filter(function (d) { return d[3] === g; }).map(function (d) { return d[0]; }), saved = C().dock[g] || [], out = saved.filter(function (k) { return base.indexOf(k) >= 0; });
+  base.forEach(function (k) { if (out.indexOf(k) < 0) out.push(k); }); return out;
+}
+function applyDock() {
+  var dock = $('#dock'); if (!dock) return; var seps = CP.$$('.sep', dock), anchor = { A: seps[0] || null, B: seps[1] || null, C: null };
+  ['A', 'B', 'C'].forEach(function (g) { groupKeys(g).forEach(function (k) { var el = elOf(k); if (!el) return; dock.insertBefore(el, anchor[g]); }); });
+  DOCK.forEach(function (d) { var el = elOf(d[0]); if (el) el.classList.toggle('chide', hidden(d[0]) && d[0] !== 'tools'); });
+}
+/* usado pelo painel de Ferramentas */
+function arrange(items) {
+  var c = C(), list = items.filter(function (it) { return !hidden(it.key); }), pos = function (k) { var i = c.tools.indexOf(k); return i < 0 ? 1000 + CP.TOOL_KEYS.indexOf(k) : i; };
+  list.sort(function (a, b) { return pos(a.key) - pos(b.key); }); return list;
+}
+function save() { CP.persistMeta(); }
+
+var tab = 'dock';
+function rows() {
+  if (tab === 'dock') {
+    var out = [], gl = { A: 'Ferramentas de desenho', B: 'Cores', C: 'Menus' };
+    ['A', 'B', 'C'].forEach(function (g) { out.push({ head: gl[g] }); groupKeys(g).forEach(function (k, i, arr) { var d = DOCK.filter(function (x) { return x[0] === k; })[0]; out.push({ k: k, name: d[1], ico: d[2], first: i === 0, last: i === arr.length - 1, lock: k === 'tools', g: g }); }); });
+    return out;
+  }
+  var c = C(), keys = CP.TOOL_KEYS.slice().sort(function (a, b) { var ia = c.tools.indexOf(a), ib = c.tools.indexOf(b); return (ia < 0 ? 1000 + CP.TOOL_KEYS.indexOf(a) : ia) - (ib < 0 ? 1000 + CP.TOOL_KEYS.indexOf(b) : ib); });
+  return keys.map(function (k, i) { var t = TOOLS.filter(function (x) { return x[0] === k; })[0]; return { k: k, name: t[1], ico: t[2], first: i === 0, last: i === keys.length - 1, g: 'T' }; });
+}
+function html() {
+  var h = '<h3>Personalizar botões</h3><div style="display:flex;gap:6px"><button type="button" class="chip' + (tab === 'dock' ? ' on' : '') + '" data-t="dock">Barra de baixo</button><button type="button" class="chip' + (tab === 'tools' ? ' on' : '') + '" data-t="tools">Painel de Ferramentas</button></div>' +
+    '<p style="margin:0;color:var(--muted);font-size:13px;line-height:1.4">Use ▲ ▼ para mudar a ordem e o botão Visível/Oculto para esconder. Tudo vale na hora e fica salvo neste aparelho.</p><div style="display:flex;flex-direction:column;gap:4px;max-height:50vh;overflow:auto">';
+  rows().forEach(function (r) {
+    if (r.head) { h += '<div style="font-weight:700;margin:6px 0 0;font-size:13px;color:var(--muted)">' + esc(r.head) + '</div>'; return; }
+    var off = hidden(r.k) && !r.lock;
+    h += '<div style="display:flex;align-items:center;gap:6px;min-height:44px;padding:0 6px;border-radius:12px;background:var(--panel-2);' + (off ? 'opacity:.5' : '') + '"><span style="width:26px;display:flex;justify-content:center">' + CP.svgIcon(r.ico) + '</span><span style="flex:1;font-weight:600">' + esc(r.name) + '</span>' +
+      '<button type="button" class="chip" data-m="up" data-k="' + r.k + '" data-g="' + r.g + '"' + (r.first ? ' disabled style="opacity:.3"' : '') + '>▲</button><button type="button" class="chip" data-m="dn" data-k="' + r.k + '" data-g="' + r.g + '"' + (r.last ? ' disabled style="opacity:.3"' : '') + '>▼</button>' +
+      (r.lock ? '<span style="width:64px;text-align:center;color:var(--muted);font-size:12px">fixo</span>' : '<button type="button" class="chip' + (off ? '' : ' on') + '" style="width:64px" data-m="eye" data-k="' + r.k + '">' + (off ? 'Oculto' : 'Visível') + '</button>') + '</div>';
+  });
+  return h + '</div><div class="btns"><button type="button" id="cuR">Restaurar padrão</button><button type="button" class="ok" id="cuX">Concluir</button></div>';
+}
+function move(k, g, dir) {
+  var c = C();
+  if (g === 'T') { var all = rows().map(function (r) { return r.k; }), i = all.indexOf(k), j = i + dir; if (j < 0 || j >= all.length) return; all.splice(i, 1); all.splice(j, 0, k); c.tools = all; }
+  else { var list = groupKeys(g), a = list.indexOf(k), b = a + dir; if (b < 0 || b >= list.length) return; list.splice(a, 1); list.splice(b, 0, k); c.dock[g] = list; applyDock(); }
+}
+CP.customMenu = function (start) {
+  if (start) tab = start;
+  CP.ui.sheetMenu(html(), function (h, close) {
+    var bx = h.querySelector('.box'); if (bx) { bx.style.width = 'min(560px,100%)'; bx.style.maxHeight = '90vh'; bx.style.overflow = 'auto'; }
+    function wire() {
+      CP.$$('[data-t]', h).forEach(function (b) { b.addEventListener('click', function () { tab = b.getAttribute('data-t'); h.querySelector('.box').innerHTML = html(); wire(); }); });
+      CP.$$('[data-m]', h).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var m = b.getAttribute('data-m'), k = b.getAttribute('data-k'), c = C();
+          if (m === 'eye') { var i = c.hide.indexOf(k); if (i >= 0) c.hide.splice(i, 1); else c.hide.push(k); applyDock(); } else move(k, b.getAttribute('data-g'), m === 'up' ? -1 : 1);
+          save(); var sc = h.querySelector('.box > div:last-of-type, .box > div[style*="overflow"]'); var top = sc ? sc.scrollTop : 0; h.querySelector('.box').innerHTML = html(); wire(); var sc2 = h.querySelector('.box > div[style*="overflow"]'); if (sc2) sc2.scrollTop = top;
+        });
+      });
+      h.querySelector('#cuX').addEventListener('click', close);
+      h.querySelector('#cuR').addEventListener('click', function () { S.custom = { hide: [], dock: {}, tools: [] }; applyDock(); save(); h.querySelector('.box').innerHTML = html(); wire(); CP.toast('Botões restaurados ao padrão.'); });
+    }
+    wire();
+  });
+};
+CP.custom = { apply: applyDock, arrange: arrange, hidden: hidden };
 })();
 (function () {
 'use strict';
@@ -3982,6 +5171,8 @@ function syncDock() {
   if (S.tool !== 'eraser') {
     var pal = S.tool === 'hl' ? CP.HL_COLORS : CP.COLORS, c = cfg().c;
     pal.forEach(function (col) { box.appendChild(swatch(col, col === c, function () { cfg().c = col; CP.persistMeta(); syncDock(); syncPop(); })); });
+    (S.customColors || []).slice(0, 4).forEach(function (col) { if (pal.indexOf(col) < 0) box.appendChild(swatch(col, col === c, function () { cfg().c = col; CP.persistMeta(); syncDock(); syncPop(); })); });
+    box.appendChild(CP.rainbowSwatch(function () { CP.colorPicker(cfg().c, function (hx) { cfg().c = hx; CP.persistMeta(); syncDock(); syncPop(); }); }));
   }
   box.style.display = S.tool === 'eraser' ? 'none' : 'flex';
   $$sep();
@@ -4010,6 +5201,8 @@ function syncPop() {
   if (t !== 'eraser') {
     var pal = t === 'hl' ? CP.HL_COLORS : CP.COLORS;
     pal.forEach(function (col) { cols.appendChild(swatch(col, col === c.c, function () { c.c = col; CP.persistMeta(); syncDock(); syncPop(); })); });
+    (S.customColors || []).forEach(function (col) { if (pal.indexOf(col) < 0) cols.appendChild(swatch(col, col === c.c, function () { c.c = col; CP.persistMeta(); syncDock(); syncPop(); })); });
+    cols.appendChild(CP.rainbowSwatch(function () { CP.colorPicker(c.c, function (hx) { c.c = hx; CP.persistMeta(); syncDock(); syncPop(); }); }));
   }
   cols.previousElementSibling.style.display = t === 'eraser' ? 'none' : '';
 }
@@ -4129,7 +5322,7 @@ function boot() {
   if (!UI.isNarrow() && window.innerWidth >= 1280) { var first = UI.visible()[0]; if (first) UI.open(first.id); }
   else UI.setView('list');
   p.then(function () {
-    applyTheme(); syncDock(); E.resetHistory();
+    applyTheme(); syncDock(); if (CP.custom) CP.custom.apply(); E.resetHistory();
     var open = CP.cur();
     if (S.openId && !open) { S.openId = null; showEditor(false); }
     UI.renderAll();
