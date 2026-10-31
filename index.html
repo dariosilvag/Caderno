@@ -121,6 +121,8 @@ svg { display: block; }
 .tbox { position: absolute; min-width: 80px; pointer-events: none; border: 1.5px dashed transparent; border-radius: 8px; padding: 4px 6px 4px 6px; }
 .tbox.sel { border-color: var(--accent); background: rgba(47,91,234,.05); }
 .tbox .tx { outline: none; min-height: 1.2em; white-space: pre-wrap; word-break: break-word; font-family: var(--font-ui); line-height: 1.35; user-select: text; -webkit-user-select: text; color: var(--paper-ink); }
+.tbox .sv { display: none; position: absolute; right: 0; bottom: -40px; background: var(--accent); color: #fff; border-radius: 12px; padding: 8px 14px; font-weight: 700; font-size: 14px; min-height: 36px; box-shadow: var(--shadow); z-index: 3; pointer-events: auto; }
+.tbox:not(.sel) .sv { display: none !important; }
 .tbox .grip { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; border-radius: 14px; background: var(--accent); display: none; place-items: center; touch-action: none; }
 .tbox .grip .ico { width: 14px; height: 14px; stroke: #fff; }
 .tbox .del { position: absolute; right: -14px; top: -14px; width: 28px; height: 28px; border-radius: 14px; background: var(--danger); display: none; place-items: center; }
@@ -189,6 +191,18 @@ svg { display: block; }
 .obj .rs { right: -15px; bottom: -15px; background: var(--accent); }
 .obj .grip svg, .obj .del svg, .obj .rs svg { width: 14px; height: 14px; stroke: #fff; }
 .obj.sel .grip, .obj.sel .del, .obj.sel .rs { display: grid; }
+.web { display: flex; flex-direction: column; background: #fff; border: 1.5px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
+.web .wbar { display: flex; gap: 4px; align-items: center; padding: 4px; background: var(--panel); border-radius: 10px 10px 0 0; border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+.web .wbar button { min-width: 38px; min-height: 36px; border-radius: 9px; font-size: 18px; color: var(--ink); }
+.web .wbar button:active { background: var(--accent-soft); }
+.web .wbar input { flex: 1; min-width: 0; min-height: 36px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink); padding: 0 10px; font: 14px var(--font-ui); user-select: text; -webkit-user-select: text; }
+.web .wfr { flex: 1; width: 100%; border: 0; background: #fff; border-radius: 0 0 10px 10px; min-height: 0; }
+.web .whint { display: none; position: absolute; left: 8px; right: 8px; bottom: 8px; background: rgba(20,23,28,.88); color: #fff; font-size: 13px; padding: 8px 10px; border-radius: 10px; pointer-events: none; }
+.web .whome { flex: 1; display: none; flex-direction: column; gap: 8px; align-items: center; justify-content: center; padding: 14px; color: #14171c; text-align: center; }
+.web .whome .wh { font: 600 20px var(--font-title); } .web .whome .ws { color: #667085; font-size: 14px; }
+.web .whome button { padding: 11px 18px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-weight: 700; min-width: 220px; }
+.obj.web.full { position: fixed !important; inset: 0 !important; left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important; z-index: 60; border-radius: 0; }
+.obj.web.full .grip, .obj.web.full .del, .obj.web.full .rs { display: none !important; }
 .m3d canvas { width: 100%; height: 100%; display: block; border-radius: 6px; background: transparent; touch-action: none; }
 .m3d .lbl { position: absolute; left: 10px; bottom: 8px; font-size: 12px; color: #667085; pointer-events: none; }
 .m3d .busy { position: absolute; inset: 0; display: grid; place-items: center; color: #667085; font-size: 14px; pointer-events: none; }
@@ -339,6 +353,7 @@ html, body { overflow: hidden; }
         <div class="insgrid">
           <button class="insbtn" data-ins="table" type="button"><svg class="ico" data-ico="table"></svg>Tabela</button>
           <button class="insbtn" data-ins="model" type="button"><svg class="ico" data-ico="cube"></svg>Modelo 3D</button>
+          <button class="insbtn" data-ins="web" type="button"><svg class="ico" data-ico="globe"></svg>Navegador</button>
           <button class="insbtn" data-ins="image" type="button"><svg class="ico" data-ico="image"></svg>Imagem</button>
         </div>
         <h4 id="popInsH">Tabela</h4>
@@ -403,6 +418,7 @@ var ICONS = {
   download: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 20h14"/>',
   lasso: '<path d="M12 4c4.4 0 8 2 8 4.5S16.4 13 12 13 4 11 4 8.5 7.6 4 12 4z" stroke-dasharray="2.5 2.5"/><path d="M9 13c-1 2 0 3.5 1.5 4.5s1 2.5-1 3"/>',
   tools: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/>',
   shapes: '<rect x="3" y="3" width="8" height="8" rx="1.5"/><circle cx="17" cy="7" r="4"/><path d="M3 21l5-9 5 9z"/><path d="M15 21l6-4"/>',
   calc: '<rect x="4" y="2.5" width="16" height="19" rx="2.5"/><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"/>',
   chart: '<path d="M3 3v18h18"/><path d="M6 16c3-9 6-9 8-4s4 3 6-6"/>',
@@ -498,7 +514,7 @@ function noteBody(n) { var o = {}; for (var k in n) o[k] = n[k]; return o; }
 
 function persistLocal() {}
 function persistMeta() {
-  var meta = { folders: S.folders, prefs: { tool: S.tool, pen: S.pen, hl: S.hl, penOnly: S.penOnly, snap: S.snap, theme: S.theme } };
+  var meta = { folders: S.folders, prefs: { tool: S.tool, pen: S.pen, hl: S.hl, penOnly: S.penOnly, snap: S.snap, theme: S.theme, autoSolve: S.autoSolve } };
   run('meta', 'readwrite', function (s) { return s.put(meta, 'meta'); }).catch(function () {});
 }
 var saveTimers = {};
@@ -549,6 +565,7 @@ function applyPrefs(p) {
   if (p.hl) S.hl = p.hl;
   if (typeof p.penOnly === 'boolean') S.penOnly = p.penOnly;
   if (typeof p.snap === 'boolean') S.snap = p.snap;
+  if (typeof p.autoSolve === 'boolean') S.autoSolve = p.autoSolve;
   if (p.tool && p.tool !== 'listen') S.tool = p.tool;
   if (p.theme) S.theme = p.theme;
 }
@@ -573,7 +590,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&
 window.CP = { $: $, $$: $$, S: S, icon: icon, svgIcon: svgIcon, paintIcons: paintIcons, COLORS: COLORS, HL_COLORS: HL_COLORS, PAPERS: PAPERS,
   PAGE_W: PAGE_W, PAGE_H: PAGE_H, uid: uid, newNote: newNote, byId: byId, cur: cur, queueSave: queueSave, flushSave: flushSave,
   persistLocal: persistLocal, persistMeta: persistMeta, deleteForever: deleteForever, initStore: initStore, toast: toast,
-  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v12' };
+  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v14' };
 })();
 (function () {
 'use strict';
@@ -951,10 +968,13 @@ function placeTexts() {
     if (tx.mono) { t.style.fontFamily = 'ui-monospace, Menlo, Consolas, monospace'; t.style.whiteSpace = 'pre'; t.style.lineHeight = '1.3'; t.style.overflowX = 'auto'; }
     var g = document.createElement('div'); g.className = 'grip'; g.innerHTML = CP.svgIcon('move');
     var d = document.createElement('button'); d.className = 'del'; d.type = 'button'; d.setAttribute('aria-label', 'Excluir texto'); d.innerHTML = CP.svgIcon('x');
-    b.appendChild(g); b.appendChild(d); b.appendChild(t); texts.appendChild(b);
+    var sv = document.createElement('button'); sv.className = 'sv'; sv.type = 'button'; sv.textContent = 'Resolver';
+    function updSv() { sv.style.display = (!tx.sol && CP.math && CP.math.looksMath(tx.text)) || (tx.sol && CP.math && CP.math.looksMath(tx.text)) ? 'block' : 'none'; }
+    sv.addEventListener('pointerdown', function (ev) { ev.preventDefault(); ev.stopPropagation(); if (CP.autoSolve) CP.autoSolve(tx, true); });
+    b.appendChild(g); b.appendChild(d); b.appendChild(sv); b.appendChild(t); texts.appendChild(b); updSv();
     t.addEventListener('focus', function () { $$sel(); b.classList.add('sel'); });
-    t.addEventListener('input', function () { tx.text = t.innerText; CP.queueSave(note()); });
-    t.addEventListener('blur', function () { setTimeout(function () { if (!b.contains(document.activeElement)) b.classList.remove('sel'); }, 150); if (!tx.text.trim()) { dropText(tx); } });
+    t.addEventListener('input', function () { tx.text = t.innerText; CP.queueSave(note()); updSv(); });
+    t.addEventListener('blur', function () { setTimeout(function () { if (!b.contains(document.activeElement)) b.classList.remove('sel'); }, 150); if (!tx.text.trim()) { dropText(tx); } else if (CP.autoSolve) CP.autoSolve(tx, false); });
     d.addEventListener('click', function () { dropText(tx, true); });
     g.addEventListener('pointerdown', function (ev) {
       ev.preventDefault(); g.setPointerCapture(ev.pointerId);
@@ -1382,7 +1402,7 @@ function nearest() { var s = $('#scroller'); return Math.round((s.scrollTop + s.
 /* ---------- Estrutura comum: mover, redimensionar, excluir ---------- */
 function frame(o, withResize, fixedH) {
   var s = sc(), el = document.createElement('div');
-  el.className = 'obj ' + (o.type === 'table' ? 'otbl' : o.type === 'm3d' ? 'm3d' : 'oimg'); el.setAttribute('data-id', o.id);
+  el.className = 'obj ' + (o.type === 'table' ? 'otbl' : o.type === 'm3d' ? 'm3d' : o.type === 'web' ? 'web' : 'oimg'); el.setAttribute('data-id', o.id);
   el.style.left = o.x * s + 'px'; el.style.top = o.y * s + 'px'; el.style.width = o.w * s + 'px';
   if (fixedH) el.style.height = o.h * s + 'px';
   var g = document.createElement('div'); g.className = 'grip'; g.innerHTML = CP.svgIcon('move');
@@ -1509,7 +1529,7 @@ function place() {
   layer.innerHTML = '';
   var n = note(); if (!n || !n.objs) return;
   n.objs.forEach(function (o) {
-    var el = o.type === 'table' ? tableEl(o) : o.type === 'img' ? imgEl(o) : (O.m3dEl ? O.m3dEl(o, frame, cleanups) : null);
+    var el = o.type === 'table' ? tableEl(o) : o.type === 'img' ? imgEl(o) : o.type === 'web' ? (O.webEl ? O.webEl(o) : null) : (O.m3dEl ? O.m3dEl(o, frame, cleanups) : null);
     if (el) { layer.appendChild(el); if (S.selObj === o.id) el.classList.add('sel'); }
   });
 }
@@ -1763,7 +1783,8 @@ function compose(n, k, page) {
   (n.objs || []).forEach(function (o) {
     var el = document.querySelector('#objs [data-id="' + o.id + '"]'); if (!el) return;
     try {
-      if (o.type === 'img') { var im = el.querySelector('img'); if (im && im.naturalWidth) fitImg(c, im, o); }
+      if (o.type === 'web') { c.save(); c.strokeStyle = '#94a3b8'; c.lineWidth = 2; c.strokeRect(o.x, o.y, o.w, o.h); c.fillStyle = '#475569'; c.font = '20px ' + FONT; c.fillText('Página web: ' + (o.url || '(em branco)'), o.x + 14, o.y + 34, o.w - 28); c.restore(); }
+      else if (o.type === 'img') { var im = el.querySelector('img'); if (im && im.naturalWidth) fitImg(c, im, o); }
       else if (o.type === 'm3d') { var cvs = el.querySelector('canvas'); if (cvs && cvs.width) c.drawImage(cvs, o.x, o.y, o.w, o.h); }
       else if (o.type === 'table') drawTable(c, o, el);
     } catch (e) {}
@@ -1840,6 +1861,7 @@ function buildMd(n) {
       rows.splice(1, 0, '| ' + o.rows[0].map(function () { return '---'; }).join(' | ') + ' |');
       items.push({ y: o.y, x: o.x, s: rows.join('\n') });
     } else if (o.type === 'm3d') items.push({ y: o.y, x: o.x, s: '*[Modelo 3D: ' + (o.name || 'sem nome') + ']*' });
+    else if (o.type === 'web') items.push({ y: o.y, x: o.x, s: '*[Página web: ' + (o.url || 'em branco') + ']*' });
     else if (o.type === 'img') items.push({ y: o.y, x: o.x, s: '*[Imagem]*' });
   });
   items.sort(function (a, b) { return a.y - b.y || a.x - b.x; });
@@ -2693,8 +2715,10 @@ CP.renderTools = function (closePops) {
   var th = $('#toolsH'); if (th) th.textContent = 'Ferramentas · Caderno ' + CP.VERSION;
   var z = Math.round((S.zoom || 1) * 100);
   var items = [
+    ['globe', 'Navegador', false, function () { CP.objs.addWeb(); S.tool = 'select'; if (CP.hooks.toolChanged) CP.hooks.toolChanged(); CP.persistMeta(); }],
     ['shapes', 'Formas', false, function () { CP.shapesMenu(); }],
     ['calc', 'Resolver', false, function () { CP.solveMenu(); }],
+    ['calc', S.autoSolve === false ? 'Auto-resolver: não' : 'Auto-resolver: sim', S.autoSolve !== false, function () { S.autoSolve = S.autoSolve === false; CP.persistMeta(); CP.toast(S.autoSolve === false ? 'Resolver sozinho: desligado' : 'Resolver sozinho: ligado'); }],
     ['chart', 'Gráfico', false, function () { CP.graphMenu(); }],
     ['ruler', 'Régua', CP.ruler.on, function () { CP.ruler.toggle(); }],
     ['angle', 'Transferidor', CP.proto.on, function () { CP.proto.toggle(); }],
@@ -3301,7 +3325,21 @@ function solveSystem(parts) {
   return { lines: L, answer: 'x = ' + fracStr(x) + ', y = ' + fracStr(y), kind: 'sys' };
 }
 
-CP.math = { solve: solve, parse: parse, ev: ev, compile: compile, fmt: fmt, show: show, vAdd: vAdd, vSub: vSub, vMul: vMul, vDiv: vDiv, toPoly: toPoly, normalize: normalize };
+/* o texto parece uma conta ou equação que dá para resolver? */
+function looksMath(s) {
+  s = String(s || '').trim();
+  if (!s || s.length > 140 || !/[0-9]/.test(s) && !/[a-z]\s*=|=\s*[a-z]/i.test(s)) return false;
+  if (!/[+\-−×÷*\/^=²³√:·x]/i.test(s) || /[a-zA-Z]{4,}/.test(s.replace(/sqrt|sen|sin|cos|tan|log|ln|exp|abs|raiz|asin|acos|atan|pi/gi, ''))) return false;
+  var r = solve(s); return !r.error;
+}
+/* resolve sozinho ao terminar de escrever? (termina em "=" ou é equação com letra) */
+function wantsAuto(s) {
+  s = String(s || '').trim();
+  if (!looksMath(s)) return false;
+  if (/=\s*\??\s*$/.test(s)) return true;
+  return /=/.test(s) && /[a-z]/i.test(s.replace(/sqrt|sen|sin|cos|tan|log|ln|exp|abs|raiz|pi/gi, ''));
+}
+CP.math = { looksMath: looksMath, wantsAuto: wantsAuto, solve: solve, parse: parse, ev: ev, compile: compile, fmt: fmt, show: show, vAdd: vAdd, vSub: vSub, vMul: vMul, vDiv: vDiv, toPoly: toPoly, normalize: normalize };
 })();
 (function () {
 'use strict';
@@ -3653,7 +3691,92 @@ CP.solveMenu = function (pref) {
     });
 };
 
+/* resolve o texto de uma caixa e escreve a solução logo abaixo (atualiza se já existir) */
+CP.autoSolve = function (tx, manual) {
+  var n = note(); if (!n || !CP.math) return;
+  var sol = tx.sol && n.texts.filter(function (t) { return t.id === tx.sol; })[0];
+  if (!manual) { if (S.autoSolve === false || !CP.math.wantsAuto(tx.text)) return; if (sol && sol.src === tx.text) return; }
+  var r = CP.math.solve(tx.text);
+  if (r.error) { if (manual) CP.toast(r.error); return; }
+  var L = r.lines.slice();
+  if (!manual) {   /* automático = rascunho enxuto; o botão Resolver mostra tudo */
+    var a = L.indexOf('Passo a passo:'), z = a < 0 ? -1 : L.findIndex(function (l, i) { return i > a && /^Resultado/.test(l); });
+    if (a >= 0 && z > a) L.splice(a - 1 >= 0 && L[a - 1] === '' ? a - 1 : a, z - (a - 1 >= 0 && L[a - 1] === '' ? a - 1 : a) - 1);
+    var v = L.indexOf('Verificação:'); if (v >= 0) { var e = v; while (e < L.length && L[e] !== '') e++; L.splice(v > 0 && L[v - 1] === '' ? v - 1 : v, e - (v > 0 && L[v - 1] === '' ? v - 1 : v)); }
+  }
+  var lines = L.join('\n').replace(/\n{3,}/g, '\n\n').replace(/\n+$/, ''), size = 18, maxc = Math.max.apply(null, lines.split('\n').map(function (l) { return l.length; })), w = Math.min(900, Math.max(260, Math.round(maxc * size * 0.62) + 28));
+  var el = document.querySelector('#texts [data-id="' + tx.id + '"]'), hgt = el ? el.offsetHeight / (sc() || 1) : tx.size * 1.6;
+  if (sol) { sol.text = lines; sol.src = tx.text; sol.w = w; sol.size = size; sol.x = tx.x; sol.y = Math.round(tx.y + hgt + 6); }
+  else {
+    sol = mkText(lines, tx.x, tx.y + hgt + 6, size, '#2f5bea', { w: w, mono: true }); sol.src = tx.text; sol.g = tx.id; tx.sol = sol.id;
+    n.texts.push(sol); E.push({ t: 'tadd', tx: sol });
+  }
+  if (E.placeTexts) E.placeTexts(); CP.queueSave(n);
+  if (manual) CP.toast('Solução escrita abaixo da conta.');
+};
 CP.mathApi = { plot2D: plot2D, plot3D: plot3D, shapes: SH, place: placeShape };
+})();
+(function () {
+'use strict';
+var CP = window.CP, $ = CP.$, S = CP.S, O = CP.objs;
+
+/* Atalhos que costumam aceitar ser exibidos dentro de outra página */
+var HOME = [
+  ['Wikipédia', 'https://pt.wikipedia.org/'],
+  ['Google', 'https://www.google.com/search?igu=1&q='],
+  ['Desmos (gráficos)', 'https://www.desmos.com/calculator'],
+  ['GeoGebra', 'https://www.geogebra.org/graphing'],
+  ['YouTube', 'https://www.youtube.com/embed?listType=search&list=']
+];
+function normUrl(q) {
+  q = String(q || '').trim(); if (!q) return '';
+  var m;
+  if ((m = /^(?:https?:\/\/)?(?:www\.|m\.)?youtube\.com\/watch\?(?:.*&)?v=([\w-]{6,})/i.exec(q))) return 'https://www.youtube.com/embed/' + m[1];
+  if ((m = /^(?:https?:\/\/)?youtu\.be\/([\w-]{6,})/i.exec(q))) return 'https://www.youtube.com/embed/' + m[1];
+  if (/^https?:\/\//i.test(q)) return q;
+  if (/^[^\s]+\.[a-z]{2,}([\/?#:].*)?$/i.test(q)) return 'https://' + q;
+  return 'https://www.google.com/search?igu=1&q=' + encodeURIComponent(q);
+}
+function shortHost(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } }
+
+O.webEl = function (o) {
+  var el = O.frame(o, true, true); el.className += ' web';
+  var bar = document.createElement('div'); bar.className = 'wbar';
+  function mk(txt, label, fn) { var b = document.createElement('button'); b.type = 'button'; b.textContent = txt; b.setAttribute('aria-label', label); b.addEventListener('click', fn); return b; }
+  var inp = document.createElement('input'); inp.type = 'text'; inp.value = o.url || ''; inp.placeholder = 'Endereço ou busca'; inp.setAttribute('inputmode', 'url'); inp.autocapitalize = 'none'; inp.autocomplete = 'off'; inp.spellcheck = false;
+  var fr = document.createElement('iframe'); fr.className = 'wfr';
+  fr.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads');
+  fr.setAttribute('allow', 'fullscreen; clipboard-write'); fr.setAttribute('referrerpolicy', 'no-referrer'); fr.setAttribute('loading', 'lazy');
+  var hint = document.createElement('div'); hint.className = 'whint';
+  function go(q) {
+    var u = normUrl(q); if (!u) return;
+    o.url = u; inp.value = u; fr.src = u; hint.style.display = 'block'; O.save();
+  }
+  bar.appendChild(mk('⌂', 'Início', function () { o.url = ''; inp.value = ''; showHome(); O.save(); }));
+  bar.appendChild(inp);
+  bar.appendChild(mk('↻', 'Recarregar', function () { if (o.url) { fr.src = 'about:blank'; setTimeout(function () { fr.src = o.url; }, 30); } }));
+  bar.appendChild(mk('↗', 'Abrir no Safari', function () { if (o.url) window.open(o.url, '_blank', 'noopener'); }));
+  bar.appendChild(mk('⤢', 'Tela cheia', function () { el.classList.toggle('full'); }));
+  inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); go(inp.value); } });
+  inp.addEventListener('focus', function () { setTimeout(function () { try { inp.select(); } catch (x) {} }, 30); });
+  hint.textContent = 'Se a página não aparecer, o site não permite ser exibido dentro de outro app. Toque em ↗ para abrir no Safari.';
+  var home = document.createElement('div'); home.className = 'whome';
+  function showHome() {
+    home.style.display = 'flex'; fr.style.display = 'none'; hint.style.display = 'none'; home.innerHTML = '<div class="wh">Navegador na nota</div><div class="ws">Escreva um endereço ou uma busca na barra de cima, ou escolha:</div>';
+    HOME.forEach(function (h) { var b = document.createElement('button'); b.type = 'button'; b.textContent = h[0]; b.addEventListener('click', function () { if (/[=]$/.test(h[1])) { inp.focus(); inp.value = ''; CP.toast('Escreva o que quer buscar e toque em Enter.'); } else go(h[1]); home.style.display = 'none'; fr.style.display = 'block'; }); home.appendChild(b); });
+  }
+  inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { home.style.display = 'none'; fr.style.display = 'block'; } });
+  el.appendChild(bar); el.appendChild(home); el.appendChild(fr); el.appendChild(hint);
+  if (o.url) { home.style.display = 'none'; fr.src = o.url; } else { showHome(); }
+  fr.addEventListener('load', function () { /* quando carrega, esconde o aviso depois de alguns segundos */ setTimeout(function () { hint.style.display = 'none'; }, 6000); });
+  return el;
+};
+O.addWeb = function (url) {
+  var o = { id: CP.uid(), type: 'web', x: 80, y: Math.max(60, O.nearest()), w: 780, h: 560, url: url ? normUrl(url) : '' };
+  O.list().push(o); S.selObj = o.id; O.place(); O.save();
+  return o;
+};
+CP.web = { norm: normUrl, host: shortHost };
 })();
 (function () {
 'use strict';
@@ -3913,12 +4036,15 @@ function chip(txt, fn, cls) {
 }
 function renderInsert() {
   var host = $('#insOpts'); host.innerHTML = '';
-  $('#popInsH').textContent = insKind === 'table' ? 'Tamanho da tabela' : insKind === 'model' ? 'Modelo 3D' : 'Imagem';
+  $('#popInsH').textContent = insKind === 'table' ? 'Tamanho da tabela' : insKind === 'model' ? 'Modelo 3D' : insKind === 'web' ? 'Navegador' : 'Imagem';
   if (insKind === 'table') {
     [[2, 2], [3, 3], [4, 3], [5, 4], [6, 5]].forEach(function (d) { host.appendChild(chip(d[0] + ' × ' + d[1], function () { CP.objs.addTable(d[0], d[1]); inserted(); })); });
   } else if (insKind === 'model') {
     host.appendChild(chip('Abrir arquivo STL, OBJ ou GLB', function () { pickFile('', function (f) { CP.objs.addModelFile(f); inserted(); }); }, 'on'));
     Object.keys(CP.objs.PRIMS).forEach(function (k) { host.appendChild(chip(CP.objs.PRIMS[k], function () { CP.objs.addPrimitive(k); inserted(); })); });
+  } else if (insKind === 'web') {
+    host.appendChild(chip('Abrir janela de navegador', function () { CP.objs.addWeb(); inserted(); }, 'on'));
+    [['Wikipédia', 'https://pt.wikipedia.org/'], ['Desmos', 'https://www.desmos.com/calculator'], ['GeoGebra', 'https://www.geogebra.org/graphing']].forEach(function (s) { host.appendChild(chip(s[0], function () { CP.objs.addWeb(s[1]); inserted(); })); });
   } else {
     host.appendChild(chip('Escolher foto ou imagem', function () { pickFile('image/*', function (f) { CP.objs.addImage(f); inserted(); }); }, 'on'));
   }
