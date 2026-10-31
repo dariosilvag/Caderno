@@ -260,7 +260,8 @@ html, body { overflow: hidden; }
 .tl-proto .cl { background: var(--danger); }
 .tl-lab { position: absolute; left: 50%; top: 100%; transform: translate(-50%, 6px); font-size: 13px; font-weight: 700; color: var(--accent); background: var(--bar); padding: 2px 8px; border-radius: 10px; pointer-events: none; white-space: nowrap; }
 .lasso-box { border: 2px dashed var(--accent); border-radius: 6px; background: rgba(47,91,234,.06); z-index: 4; }
-.lasso-bar { display: flex !important; left: 0; top: -54px; }
+.lasso-bar { display: flex !important; left: 0; top: -54px; pointer-events: auto; touch-action: none; }
+.lasso-bar button { pointer-events: auto; }
 .lasso-box .scale.sw { right: -22px; bottom: auto; top: 50%; margin-top: -18px; background: #0f766e; }
 .lasso-box .scale.sh { bottom: -22px; right: auto; left: 50%; margin-left: -18px; background: #0f766e; }
 .lasso-box .scale { right: -22px; bottom: -22px; left: auto; top: auto; margin: 0; width: 36px; height: 36px; font-size: 18px; }
@@ -601,7 +602,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&
 window.CP = { $: $, $$: $$, S: S, icon: icon, svgIcon: svgIcon, paintIcons: paintIcons, COLORS: COLORS, HL_COLORS: HL_COLORS, PAPERS: PAPERS,
   PAGE_W: PAGE_W, PAGE_H: PAGE_H, uid: uid, newNote: newNote, byId: byId, cur: cur, queueSave: queueSave, flushSave: flushSave,
   persistLocal: persistLocal, persistMeta: persistMeta, deleteForever: deleteForever, initStore: initStore, toast: toast,
-  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v18' };
+  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v20' };
 })();
 (function () {
 'use strict';
@@ -2233,7 +2234,7 @@ function render() {
   var s = sc(); ui = document.createElement('div'); ui.className = 'tl lasso-box';
   ui.style.left = box.x0 * s + 'px'; ui.style.top = box.y0 * s + 'px'; ui.style.width = (box.x1 - box.x0) * s + 'px'; ui.style.height = (box.y1 - box.y0) * s + 'px';
   var bar = document.createElement('div'); bar.className = 'tbar lasso-bar';
-  bar.appendChild(btn('Excluir', del)); bar.appendChild(btn('Duplicar', dup)); bar.appendChild(btn('Medidas', sizeMenu)); bar.appendChild(btn('Cor', colorMenu)); bar.appendChild(btn('Camada', layerMenu)); bar.appendChild(btn('✕', clear));
+  bar.appendChild(btn('Excluir', del)); bar.appendChild(btn('Duplicar', dup)); bar.appendChild(btn('Medidas', sizeMenu)); bar.appendChild(btn('Cor', colorMenu)); bar.appendChild(btn('Camada', layerMenu)); bar.appendChild(btn('Traduzir', function () { if (CP.lassoTranslate) CP.lassoTranslate(sel.slice()); })); bar.appendChild(btn('IA', function () { if (CP.lassoAI) CP.lassoAI(sel.slice()); })); bar.appendChild(btn('Texto', function () { if (CP.ocr) CP.ocr.run(sel.slice()); })); bar.appendChild(btn('✕', clear));
   ui.appendChild(bar);
   var h = document.createElement('div'); h.className = 'tl-h scale'; h.textContent = '⤡'; ui.appendChild(h); dragScale(h, 'p');
   var hw = document.createElement('div'); hw.className = 'tl-h scale sw'; hw.textContent = '↔'; ui.appendChild(hw); dragScale(hw, 'x');
@@ -2563,31 +2564,74 @@ function ensurePdf() {
     .then(function (u) { window.pdfjsLib.GlobalWorkerOptions.workerSrc = u; }).catch(function (e) { pdfP = null; throw e; });
   return pdfP;
 }
+/* escolher quais páginas importar (miniaturas + intervalo digitado) */
+function parseRange(t, max) {
+  var set = {}, ok = true; String(t).split(/[,;\s]+/).filter(Boolean).forEach(function (p) {
+    var m = /^(\d+)(?:-(\d*))?$/.exec(p); if (!m) { ok = false; return; } var a = +m[1], b = m[2] === undefined ? a : (m[2] === '' ? max : +m[2]); if (a > b) { var x = a; a = b; b = x; }
+    for (var i = Math.max(1, a); i <= Math.min(max, b); i++) set[i] = 1;
+  }); return ok ? Object.keys(set).map(Number) : null;
+}
+function choosePages(doc) {
+  var N = doc.numPages; if (N === 1) return Promise.resolve([1]);
+  return new Promise(function (resolve) {
+    var sel = {}, i, cap = 100; for (i = 1; i <= Math.min(N, cap); i++) sel[i] = 1;
+    var cells = ''; for (i = 1; i <= N; i++) cells += '<div class="pgc" data-p="' + i + '" style="position:relative;border-radius:10px;border:3px solid var(--accent);background:var(--panel-2);aspect-ratio:3/4;overflow:hidden;cursor:pointer"><img alt="" style="width:100%;height:100%;object-fit:contain;display:block"><span style="position:absolute;left:4px;bottom:4px;min-width:22px;text-align:center;padding:1px 6px;border-radius:10px;background:rgba(20,23,28,.78);color:#fff;font-size:12px;font-weight:700">' + i + '</span><span class="ck" style="position:absolute;right:4px;top:4px;width:22px;height:22px;border-radius:11px;background:var(--accent);color:#fff;font-size:14px;line-height:22px;text-align:center;font-weight:700">✓</span></div>';
+    CP.ui.sheetMenu('<h3>Quais páginas importar?</h3><p style="margin:0;color:var(--muted);font-size:13px">O PDF tem ' + N + ' páginas' + (N > cap ? ' (o limite é ' + cap + ' por importação)' : '') + '. Toque nas miniaturas para marcar ou desmarcar.</p>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:6px"><button type="button" class="chip" data-q="all">Todas</button><button type="button" class="chip" data-q="none">Nenhuma</button><button type="button" class="chip" data-q="odd">Ímpares</button><button type="button" class="chip" data-q="even">Pares</button></div>' +
+      '<div style="display:flex;gap:8px;align-items:center"><input id="pgR" type="text" inputmode="numeric" placeholder="ou digite: 1-3, 5, 8-10" style="flex:1;min-width:0"><button type="button" class="chip" id="pgRok">Aplicar</button></div>' +
+      (CP.cur() ? '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted)">Destino:</span><button type="button" class="chip on" data-d="new">Nova nota</button><button type="button" class="chip" data-d="cur">Esta nota (no final)</button></div>' : '') + '<div id="pgG" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;max-height:46vh;overflow:auto;padding:2px">' + cells + '</div><div class="btns"><button type="button" id="pgNo">Cancelar</button><button type="button" class="ok" id="pgOk">Importar</button></div>', function (h, close) {
+      var bx = h.querySelector('.box'); if (bx) { bx.style.width = 'min(640px,100%)'; bx.style.maxHeight = '92vh'; bx.style.overflow = 'auto'; }
+      var done = false, dest = 'new';
+      CP.$$('[data-d]', h).forEach(function (b) { b.addEventListener('click', function () { dest = b.getAttribute('data-d'); CP.$$('[data-d]', h).forEach(function (x) { x.classList.toggle('on', x === b); }); }); });
+      function paint() { var n = 0; CP.$$('.pgc', h).forEach(function (c) { var p = +c.getAttribute('data-p'), on = !!sel[p]; if (on) n++; c.style.borderColor = on ? 'var(--accent)' : 'transparent'; c.style.opacity = on ? '1' : '.55'; c.querySelector('.ck').style.display = on ? '' : 'none'; }); var ok = h.querySelector('#pgOk'); ok.textContent = n ? 'Importar ' + n + (n > 1 ? ' páginas' : ' página') : 'Importar'; }
+      CP.$$('.pgc', h).forEach(function (c) { c.addEventListener('click', function () { var p = +c.getAttribute('data-p'); if (sel[p]) delete sel[p]; else sel[p] = 1; paint(); }); });
+      CP.$$('[data-q]', h).forEach(function (b) { b.addEventListener('click', function () { var q = b.getAttribute('data-q'), k; sel = {}; for (k = 1; k <= N; k++) if (q === 'all' || (q === 'odd' && k % 2) || (q === 'even' && !(k % 2))) sel[k] = 1; paint(); }); });
+      h.querySelector('#pgRok').addEventListener('click', function () { var r = parseRange(h.querySelector('#pgR').value, N); if (!r || !r.length) { CP.toast('Use números e intervalos, por exemplo 1-3, 5, 8-10.'); return; } sel = {}; r.forEach(function (p) { sel[p] = 1; }); paint(); });
+      h.querySelector('#pgNo').addEventListener('click', function () { done = true; close(); resolve(null); });
+      h.querySelector('#pgOk').addEventListener('click', function () { var list = Object.keys(sel).map(Number).sort(function (a, b) { return a - b; }); if (!list.length) { CP.toast('Marque pelo menos uma página.'); return; } if (list.length > cap) { CP.toast('Máximo de ' + cap + ' páginas por vez: importei as primeiras ' + cap + ' marcadas.'); list = list.slice(0, cap); } done = true; close(); list.dest = dest; resolve(list); });
+      paint();
+      /* miniaturas, uma por vez (para não travar o iPad) */
+      var k = 0; (function thumb() {
+        if (done || !h.isConnected || k >= N) return; k++; var n = k, cell = h.querySelector('.pgc[data-p="' + n + '"] img');
+        doc.getPage(n).then(function (pg) { var v = pg.getViewport({ scale: 1 }), s = 150 / v.width, vp = pg.getViewport({ scale: s }), cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height); var c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height); return pg.render({ canvasContext: c, viewport: vp }).promise.then(function () { if (cell) cell.src = cv.toDataURL('image/jpeg', 0.55); cv.width = cv.height = 1; }); }).catch(function () {}).then(function () { setTimeout(thumb, 10); });
+      })();
+    });
+  });
+}
 CP.pdf = {
   importFile: function (file) {
     CP.toast('Abrindo o PDF…');
     return ensurePdf().then(function () { return file.arrayBuffer(); }).then(function (buf) {
       return window.pdfjsLib.getDocument({ data: buf }).promise;
     }).then(function (doc) {
-      var total = Math.min(doc.numPages, 100), bgs = [], i = 0;
-      if (doc.numPages > 100) CP.toast('PDF grande: importei só as primeiras 100 páginas.');
-      function next() {
-        if (i >= total) return Promise.resolve();
-        i++; CP.toast('Importando página ' + i + ' de ' + total + '…');
-        return doc.getPage(i).then(function (page) {
-          var v1 = page.getViewport({ scale: 1 }), k = Math.min(3, 1600 / v1.width), vp = page.getViewport({ scale: k });
-          var cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
-          var c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height);
-          return page.render({ canvasContext: c, viewport: vp }).promise.then(function () {
-            return new Promise(function (res) { cv.toBlob(res, 'image/jpeg', 0.82); });
-          }).then(function (blob) {
-            var aid = CP.uid(); return CP.files.put(aid, blob).then(function () { bgs.push({ a: aid, w: cv.width, h: cv.height }); cv.width = cv.height = 1; });
-          });
-        }).then(next);
-      }
-      return next().then(function () {
-        var n = CP.newNote(S.folder); n.title = (file.name || 'PDF').replace(/\.pdf$/i, ''); n.pages = bgs.length; n.bgs = bgs; n.paper = 'plain';
-        S.notes.push(n); CP.queueSave(n); CP.ui.renderAll(); CP.ui.open(n.id); CP.toast('PDF pronto: escreva por cima com a Apple Pencil.');
+      return choosePages(doc).then(function (list) {
+        if (!list || !list.length) return;
+        var total = list.length, bgs = [], i = 0;
+        function next() {
+          if (i >= total) return Promise.resolve();
+          var pn = list[i]; i++; CP.toast('Importando página ' + pn + ' (' + i + ' de ' + total + ')…');
+          return doc.getPage(pn).then(function (page) {
+            var v1 = page.getViewport({ scale: 1 }), k = Math.min(3, 1600 / v1.width), vp = page.getViewport({ scale: k });
+            var cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+            var c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height);
+            return page.render({ canvasContext: c, viewport: vp }).promise.then(function () {
+              return new Promise(function (res) { cv.toBlob(res, 'image/jpeg', 0.82); });
+            }).then(function (blob) {
+              var aid = CP.uid(); return CP.files.put(aid, blob).then(function () { bgs.push({ a: aid, w: cv.width, h: cv.height }); cv.width = cv.height = 1; });
+            });
+          }).then(next);
+        }
+        return next().then(function () {
+          var cur = list.dest === 'cur' ? CP.cur() : null;
+          if (cur) {
+            var nb = (cur.bgs || []).slice(); while (nb.length < cur.pages) nb.push(null);
+            cur.bgs = nb.concat(bgs); cur.pages = cur.bgs.length; CP.queueSave(cur);
+            CP.bg.ready(cur).then(function () { CP.engine.layout(); });
+            CP.toast(bgs.length + ' página' + (bgs.length > 1 ? 's' : '') + ' de PDF adicionada' + (bgs.length > 1 ? 's' : '') + ' no final desta nota.'); return;
+          }
+          var n = CP.newNote(S.folder); n.title = (file.name || 'PDF').replace(/\.pdf$/i, ''); n.pages = bgs.length; n.bgs = bgs; n.paper = 'plain';
+          S.notes.push(n); CP.queueSave(n); CP.ui.renderAll(); CP.ui.open(n.id); CP.toast('PDF pronto (' + bgs.length + ' página' + (bgs.length > 1 ? 's' : '') + '): escreva por cima com a Apple Pencil.');
+        });
       });
     }).catch(function (e) {
       var m = e && e.missing ? 'Faltou o arquivo ' + e.missing + ' no GitHub. Envie vendorpdf.js e pdf.worker.js na pasta do Caderno.'
@@ -2735,6 +2779,9 @@ CP.renderTools = function (closePops) {
     ['globe', 'Navegador', false, function () { CP.objs.addWeb(); S.tool = 'select'; if (CP.hooks.toolChanged) CP.hooks.toolChanged(); CP.persistMeta(); }],
     ['shapes', 'Formas', false, function () { CP.shapesMenu(); }],
     ['tools', 'Engenharia', false, function () { CP.engMenu(); }],
+    ['all', 'Tradutor', false, function () { CP.trSelection(); }],
+    ['calc', 'Assistente IA', false, function () { CP.aiSelection(); }],
+    ['shapes', 'Fluxograma', false, function () { CP.flowMenu(); }],
     ['calc', 'Resolver', false, function () { CP.solveMenu(); }],
     ['calc', S.autoSolve === false ? 'Auto-resolver: não' : 'Auto-resolver: sim', S.autoSolve !== false, function () { S.autoSolve = S.autoSolve === false; CP.persistMeta(); CP.toast(S.autoSolve === false ? 'Resolver sozinho: desligado' : 'Resolver sozinho: ligado'); }],
     ['chart', 'Gráfico', false, function () { CP.graphMenu(); }],
@@ -4140,7 +4187,13 @@ function startConnect() {
   CP.$$('[data-k]', bar).forEach(function (b) { b.addEventListener('pointerdown', function (e) { e.stopPropagation(); }); b.addEventListener('click', function () { var k = b.getAttribute('data-k'); if (k === 'x') { stop(); return; } if (k === 'ar') opt.ar = !opt.ar; else opt.st = k; sync(); }); });
   sync(); document.addEventListener('pointerdown', onDown, true);
 }
-CP.conn = { start: startConnect, stop: stop, update: update, route: route, active: function () { return active; } };
+/* cria (sem empilhar no desfazer) uma ligação entre dois grupos; usado pelo fluxograma */
+function link(n, ga, gb, o) {
+  o = o || {}; var st = o.st || 'o', ar = o.ar !== false, bb = boxes(n, (function () { var q = {}; q[ga] = 1; q[gb] = 1; return q; })());
+  if (!bb[ga] || !bb[gb] || ga === gb) return null;
+  var pts = route(bb[ga], bb[gb], st), s = A.mkStroke(pts, { c: o.c || S.pen.c, w: o.w || S.pen.w }); s.cn = { a: ga, b: gb, st: st, ar: ar }; s.d = build(pts, ar); return s;
+}
+CP.conn = { link: link, start: startConnect, stop: stop, update: update, route: route, active: function () { return active; } };
 
 /* ---------- grade magnética ---------- */
 CP.snapMove = function (snap, tsn, box) {
@@ -4894,7 +4947,7 @@ var DOCK = [
   ['tools', 'Ferramentas (fixo)', 'tools', 'C'], ['insert', 'Inserir (+)', 'plus', 'C']
 ];
 var TOOLS = [
-  ['web', 'Navegador', 'globe'], ['shapes', 'Formas', 'shapes'], ['eng', 'Engenharia', 'tools'], ['solve', 'Resolver', 'calc'], ['auto', 'Auto-resolver', 'calc'], ['graph', 'Gráfico', 'chart'], ['ruler', 'Régua', 'ruler'], ['proto', 'Transferidor', 'angle'],
+  ['web', 'Navegador', 'globe'], ['shapes', 'Formas', 'shapes'], ['eng', 'Engenharia', 'tools'], ['tr', 'Tradutor', 'all'], ['ai', 'Assistente IA', 'calc'], ['flow', 'Fluxograma', 'shapes'], ['solve', 'Resolver', 'calc'], ['auto', 'Auto-resolver', 'calc'], ['graph', 'Gráfico', 'chart'], ['ruler', 'Régua', 'ruler'], ['proto', 'Transferidor', 'angle'],
   ['pages', 'Páginas', 'all'], ['layers', 'Camadas', 'layers'], ['rec', 'Gravar áudio', 'mic'], ['listen', 'Ouvir áudio', 'play'], ['pdf', 'Importar PDF', 'pdf'], ['tmpl', 'Modelos', 'copy'], ['tags', 'Etiquetas', 'tag'], ['zoom', 'Zoom', 'zoom'], ['open', 'Abrir nota', 'file'], ['diag', 'Diagnóstico', 'tools'], ['update', 'Atualizar app', 'pdf']
 ];
 CP.TOOL_KEYS = TOOLS.map(function (t) { return t[0]; });
@@ -4967,6 +5020,400 @@ CP.customMenu = function (start) {
   });
 };
 CP.custom = { apply: applyDock, arrange: arrange, hidden: hidden };
+})();
+(function () {
+'use strict';
+/* Mais modelos de página (entram em "Modelos de página") */
+var CP = window.CP;
+function tx(x, y, text, size, w) { return { id: CP.uid(), x: x, y: y, w: w || 840, size: size || 28, c: '#14171c', text: text }; }
+function tbl(x, y, w, rows, fs) { return { id: CP.uid(), type: 'table', x: x, y: y, w: w, rows: rows, fs: fs || 24, header: true }; }
+function blank(r, c, first) { var a = [], i, j; for (i = 0; i < r; i++) { var row = []; for (j = 0; j < c; j++) row.push(first ? first(i, j) : ''); a.push(row); } return a; }
+function T(title, paper, f) { return [title, function (n) { n.paper = paper; f(n); n.objs = n.objs || []; }]; }
+var DIAS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+var MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+CP.templates.push(
+  T('Diário (dia a dia)', 'ruled', function (n) { n.title = 'Diário — '; n.texts = [tx(60, 50, 'Data:', 36, 500), tx(60, 130, 'Hoje eu agradeço por:', 28), tx(60, 560, 'Como foi meu dia:', 28)]; }),
+  T('Planejamento do dia (horários)', 'plain', function (n) { n.title = 'Dia — '; n.texts = [tx(60, 40, 'Plano do dia', 44, 600), tx(60, 110, 'Prioridade nº 1:', 28)]; n.objs = [tbl(60, 180, 880, [['Hora', 'Compromisso']].concat([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(function (h) { return [h + ':00', '']; })), 24)]; }),
+  T('Calendário mensal', 'plain', function (n) { n.title = 'Mês — '; n.texts = [tx(60, 40, 'Mês:                    Ano:', 40, 800)]; var rows = [['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']].concat(blank(6, 7)); n.objs = [tbl(40, 130, 920, rows, 22)]; }),
+  T('Hábitos do mês', 'plain', function (n) { n.title = 'Hábitos — '; n.texts = [tx(60, 40, 'Rastreador de hábitos', 40, 800)]; var h = ['Hábito']; for (var i = 1; i <= 15; i++) h.push(String(i)); n.objs = [tbl(30, 120, 940, [h].concat(blank(10, 16)), 18)]; }),
+  T('Lista de compras', 'ruled', function (n) { n.title = 'Compras'; n.texts = [tx(150, 60, 'Lista de compras', 40, 700)].concat([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(function (i) { return tx(150, 190 + i * 96, '☐ ', 30, 700); })); }),
+  T('Orçamento mensal', 'plain', function (n) { n.title = 'Orçamento — '; n.texts = [tx(60, 40, 'Orçamento do mês', 42, 800)]; n.objs = [tbl(60, 120, 880, [['Categoria', 'Previsto', 'Real', 'Diferença'], ['Moradia', '', '', ''], ['Alimentação', '', '', ''], ['Transporte', '', '', ''], ['Saúde', '', '', ''], ['Lazer', '', '', ''], ['Educação', '', '', ''], ['Outros', '', '', ''], ['Total', '', '', '']], 24)]; }),
+  T('Matriz de prioridades (Eisenhower)', 'plain', function (n) { n.title = 'Prioridades'; n.texts = [tx(60, 40, 'Matriz de prioridades', 40, 800)]; n.objs = [tbl(60, 120, 880, [['', 'Urgente', 'Não urgente'], ['Importante', '\n\n\n\n\n\n', '\n\n\n\n\n\n'], ['Não importante', '\n\n\n\n\n\n', '\n\n\n\n\n\n']], 26)]; }),
+  T('Projeto (cronograma)', 'plain', function (n) { n.title = 'Projeto — '; n.texts = [tx(60, 40, 'Projeto:', 42, 800), tx(60, 110, 'Responsável:                    Prazo:', 26)]; n.objs = [tbl(40, 180, 920, [['Etapa', 'Responsável', 'Início', 'Fim', 'Status']].concat(blank(14, 5)), 22)]; }),
+  T('Estudo / resumo de matéria', 'ruled', function (n) { n.title = 'Estudo — '; n.texts = [tx(150, 50, 'Disciplina:', 34, 700), tx(150, 120, 'Assunto:', 30, 700), tx(150, 190, 'Ideias principais:', 28, 700), tx(150, 1120, 'Dúvidas:', 28, 700)]; }),
+  T('Lista de exercícios', 'grid', function (n) { n.title = 'Exercícios — '; n.texts = [tx(60, 40, 'Lista de exercícios nº', 38, 800), tx(60, 100, 'Nome:                        Data:', 26)]; for (var i = 0; i < 6; i++) n.texts.push(tx(60, 200 + i * 200, (i + 1) + ')', 30, 100)); }),
+  T('Flashcards (pergunta e resposta)', 'plain', function (n) { n.title = 'Flashcards'; n.texts = [tx(60, 40, 'Flashcards', 40, 600)]; n.objs = [tbl(60, 110, 880, [['Pergunta', 'Resposta']].concat(blank(12, 2)), 26)]; }),
+  T('Mapa mental (centro)', 'dots', function (n) { n.title = 'Mapa mental'; n.texts = [tx(330, 640, 'Tema central', 44, 340)]; }),
+  T('Cálculo / exercício resolvido', 'grid', function (n) { n.title = 'Cálculo — '; n.texts = [tx(60, 40, 'Problema:', 32, 800), tx(60, 400, 'Dados:', 28, 300), tx(60, 700, 'Resolução:', 28, 400), tx(60, 1300, 'Resposta:', 28, 400)]; }),
+  T('Esboço de interface (celular)', 'dots', function (n) { n.title = 'Interface — '; n.texts = [tx(60, 40, 'Esboço de tela', 36, 600), tx(560, 40, 'Anotações', 28, 380)]; }),
+  T('Eng.: Dados da máquina / ordem de serviço', 'plain', function (n) { n.title = 'OS — '; n.texts = [tx(60, 40, 'Ordem de serviço', 42, 800), tx(60, 110, 'Nº:                   Data:                   Solicitante:', 26), tx(60, 170, 'Equipamento / TAG:', 26), tx(60, 240, 'Descrição do serviço:', 26), tx(60, 760, 'Materiais usados:', 26), tx(60, 1100, 'Assinatura:', 26)]; }),
+  T('Eng.: Lista de materiais (BOM)', 'plain', function (n) { n.title = 'BOM — '; n.texts = [tx(60, 40, 'Lista de materiais', 42, 800), tx(60, 110, 'Projeto:                      Rev.:', 26)]; n.objs = [tbl(40, 170, 920, [['Item', 'Descrição', 'Qtd', 'Un.', 'Fabricante / código']].concat(blank(16, 5, function (i, j) { return j === 0 ? String(i + 1) : ''; })), 22)]; }),
+  T('Eng.: Parâmetros de inversor / CLP', 'plain', function (n) { n.title = 'Parâmetros — '; n.texts = [tx(60, 40, 'Parâmetros do equipamento', 40, 800), tx(60, 110, 'Modelo:                     Nº de série:', 26)]; n.objs = [tbl(40, 170, 920, [['Parâmetro', 'Descrição', 'Valor de fábrica', 'Valor ajustado']].concat(blank(16, 4)), 22)]; }),
+  T('Eng.: Diagrama em branco (pontos)', 'dots', function (n) { n.title = 'Diagrama — '; n.texts = [tx(60, 30, 'Título do diagrama:                    Rev.:', 26)]; }),
+  T('Eng.: Fluxograma (folha quadriculada)', 'grid', function (n) { n.title = 'Fluxograma — '; n.texts = [tx(60, 30, 'Fluxograma:  (use Ferramentas ▸ Fluxograma)', 28, 840)]; })
+);
+})();
+(function () {
+'use strict';
+/* Fluxogramas: gerados a partir de uma lista de passos ou blocos avulsos; as setas usam os conectores. */
+var CP = window.CP, $ = CP.$, S = CP.S, E = CP.engine, A = CP.mathApi, esc = CP.esc;
+var PI = Math.PI;
+
+function wrap(t, max) {
+  var out = [], line = '';
+  String(t).split(/\s+/).filter(Boolean).forEach(function (w) {
+    while (w.length > max) { if (line) { out.push(line); line = ''; } out.push(w.slice(0, max)); w = w.slice(max); }
+    if (!line) line = w; else if ((line + ' ' + w).length <= max) line += ' ' + w; else { out.push(line); line = w; }
+  });
+  if (line) out.push(line); return out.length ? out : [''];
+}
+var FS = 26, LH = 34;
+function cw() { return FS * 0.5; }
+
+/* geometria: devolve pontos (caminho fechado) relativos a (0,0)-(w,h), mais linhas extras */
+function shape(kind, w, h) {
+  var P = [], extra = [], i, r;
+  if (kind === 't') { r = h / 2; var a = []; for (i = 0; i <= 20; i++) { var t = -PI / 2 + PI * i / 20; a.push([w - r + r * Math.cos(t), r + r * Math.sin(t)]); } for (i = 0; i <= 20; i++) { var u = PI / 2 + PI * i / 20; a.push([r + r * Math.cos(u), r + r * Math.sin(u)]); } a.push(a[0]); P = a; }
+  else if (kind === 'd') P = [[w / 2, 0], [w, h / 2], [w / 2, h], [0, h / 2], [w / 2, 0]];
+  else if (kind === 'io') P = [[30, 0], [w, 0], [w - 30, h], [0, h], [30, 0]];
+  else if (kind === 'doc') { var q = [[0, 0], [w, 0], [w, h - 14]]; for (i = 0; i <= 24; i++) q.push([w - w * i / 24, h - 14 + 12 * Math.sin(i / 24 * 2 * PI)]); q.push([0, 0]); P = q; }
+  else if (kind === 'c') { P = []; for (i = 0; i <= 40; i++) P.push([w / 2 + w / 2 * Math.cos(2 * PI * i / 40), h / 2 + h / 2 * Math.sin(2 * PI * i / 40)]); }
+  else { P = [[0, 0], [w, 0], [w, h], [0, h], [0, 0]]; if (kind === 'sub') { extra.push([[20, 0], [20, h]]); extra.push([[w - 20, 0], [w - 20, h]]); } }
+  return [P].concat(extra);
+}
+var KINDS = { t: 'Início / Fim', p: 'Processo', d: 'Decisão', io: 'Entrada / Saída', sub: 'Subrotina', doc: 'Documento', c: 'Conector' };
+function size(kind, text, maxW) {
+  var bw = kind === 'd' ? 400 : kind === 't' ? 300 : kind === 'c' ? 90 : (maxW || 360);
+  var per = Math.max(6, Math.floor((bw * (kind === 'd' ? 0.52 : 0.78)) / cw())), lines = wrap(text, per);
+  var bh = kind === 'c' ? 90 : kind === 'd' ? Math.max(150, lines.length * LH + 96) : kind === 't' ? 80 : Math.max(90, lines.length * LH + 40);
+  return { w: bw, h: bh, lines: lines };
+}
+/* um bloco = grupo de traços + um texto por linha centralizada */
+function block(kind, text, cx, cy, maxW) {
+  var z = size(kind, text, maxW), g = CP.uid(), x0 = cx - z.w / 2, y0 = cy - z.h / 2, strokes = [], texts = [];
+  shape(kind, z.w, z.h).forEach(function (pts) {
+    var s = A.mkStroke(pts.map(function (q) { return [x0 + q[0], y0 + q[1]]; }), { c: S.pen.c, w: S.pen.w }); s.g = g; strokes.push(s);
+  });
+  var th = z.lines.length * LH, mw = 0; z.lines.forEach(function (l) { mw = Math.max(mw, l.length); });
+  var tw = Math.round(mw * cw() + 24), ty = cy - th / 2 + (kind === 'doc' ? -6 : 0);
+  var tx = A.mkText(z.lines.join('\n'), cx - tw / 2, ty + 1, FS, S.pen.c, { w: tw }); tx.g = g; texts.push(tx);
+  return { g: g, strokes: strokes, texts: texts, cx: cx, cy: cy, w: z.w, h: z.h, kind: kind };
+}
+function label(txt, x, y, g) { var t = A.mkText(txt, x, y, 22, S.pen.c, { w: 70 }); t.g = g; return t; }
+
+function parse(src, auto) {
+  var rows = String(src).split('\n').map(function (l) { return l.trim(); }).filter(Boolean), items = [];
+  rows.forEach(function (l, i) {
+    var k = 'p', side = null, c = l.charAt(0);
+    if (c === '(') { k = 't'; l = l.slice(1); } else if (c === '?') { k = 'd'; l = l.slice(1); } else if (c === '>') { k = 'io'; l = l.slice(1); } else if (c === '=') { k = 'sub'; l = l.slice(1); } else if (c === '~') { k = 'doc'; l = l.slice(1); }
+    else if (auto && (i === 0 || i === rows.length - 1)) k = 't';
+    if (k === 'd' && l.indexOf('|') >= 0) { var a = l.split('|'); l = a[0]; side = a.slice(1).join('|').trim(); }
+    items.push({ k: k, t: l.trim() || KINDS[k], side: side });
+  });
+  return items;
+}
+
+function generate(src, auto) {
+  var n = CP.cur(); if (!n) return;
+  var items = parse(src, auto); if (!items.length) { CP.toast('Escreva pelo menos um passo.'); return; }
+  var top = Math.max(60, A.viewCenter().y - 260), cx = 360, gap = 70, y = top, bl = [], sides = [];
+  items.forEach(function (it) {
+    var z = size(it.k, it.t), b = block(it.k, it.t, cx, y + z.h / 2); y += z.h + gap; bl.push(b);
+    if (it.k === 'd' && it.side) { var sb = block('p', it.side, cx + z.w / 2 + 70 + 140, b.cy, 280); sides.push({ from: b, blk: sb }); } else sides.push(null);
+  });
+  var subs = [], all = [];
+  function add(b) { b.strokes.forEach(function (s) { n.strokes.push(s); subs.push({ t: 'add', s: s }); all.push(s); }); b.texts.forEach(function (t) { n.texts.push(t); subs.push({ t: 'tadd', tx: t }); }); }
+  bl.forEach(add); sides.forEach(function (s) { if (s) add(s.blk); });
+  var links = [];
+  function lk(a, b, st) { var s = CP.conn.link(n, a.g, b.g, { st: st || 'o', ar: true }); if (s) { links.push(s); n.strokes.push(s); subs.push({ t: 'add', s: s }); } }
+  for (var i = 0; i < bl.length - 1; i++) {
+    lk(bl[i], bl[i + 1]);
+    if (bl[i].kind === 'd') bl[i].texts.push(label('Sim', bl[i].cx + 10, bl[i].cy + bl[i].h / 2 + 4, bl[i].g));
+    if (sides[i]) { lk(bl[i], sides[i].blk); lk(sides[i].blk, bl[i + 1]); bl[i].texts.push(label('Não', bl[i].cx + bl[i].w / 2 + 6, bl[i].cy - 36, bl[i].g)); }
+  }
+  /* rótulos Sim/Não entram como textos do grupo */
+  bl.forEach(function (b) { b.texts.slice(1).forEach(function (t) { if (n.texts.indexOf(t) < 0) { n.texts.push(t); subs.push({ t: 'tadd', tx: t }); } }); });
+  var bottom = y; var need = Math.ceil((bottom + 60) / CP.PAGE_H);
+  if (need > n.pages) { n.pages = need; if (E.layout) E.layout(); }
+  E.push({ t: 'multi', list: subs });
+  if (E.placeTexts) E.placeTexts();
+  E.redraw(); CP.queueSave(n);
+  S.tool = 'lasso'; if (CP.hooks.toolChanged) CP.hooks.toolChanged(); CP.persistMeta();
+  CP.lasso.select(all);
+  CP.toast('Fluxograma criado (' + bl.length + ' blocos). Arraste um bloco: as setas acompanham.');
+}
+
+function single(kind) {
+  var n = CP.cur(); if (!n) return; var c = A.viewCenter(), b = block(kind, kind === 'c' ? 'A' : KINDS[kind], c.x, c.y);
+  var items = b.strokes.map(function (s) { return null; });
+  var subs = [], sel = [];
+  b.strokes.forEach(function (s) { n.strokes.push(s); subs.push({ t: 'add', s: s }); sel.push(s); });
+  b.texts.forEach(function (t) { n.texts.push(t); subs.push({ t: 'tadd', tx: t }); });
+  E.push({ t: 'multi', list: subs }); if (E.placeTexts) E.placeTexts(); E.redraw(); CP.queueSave(n);
+  S.tool = 'lasso'; if (CP.hooks.toolChanged) CP.hooks.toolChanged(); CP.persistMeta(); CP.lasso.select(sel);
+}
+
+var EX = '(Início\nLer pressão do tanque\n?Pressão acima de 8 bar? | Abrir válvula de alívio\n>Registrar valor no relatório\nFim';
+CP.flowMenu = function () {
+  if (!CP.cur()) { CP.toast('Abra uma nota primeiro.'); return; }
+  var html = '<h3>Fluxograma</h3>' +
+    '<p style="margin:0;color:var(--muted);font-size:13px">Escreva um passo por linha. Comece a linha com: <b>(</b> início/fim · <b>?</b> decisão · <b>&gt;</b> entrada/saída · <b>=</b> subrotina · <b>~</b> documento. Na decisão, escreva depois de <b>|</b> o que acontece no “Não”.</p>' +
+    '<textarea id="flT" rows="7" style="width:100%;box-sizing:border-box;font-size:16px;border-radius:10px;padding:8px" placeholder="Um passo por linha">' + esc(EX) + '</textarea>' +
+    '<label style="display:flex;gap:8px;align-items:center;font-size:14px"><input id="flA" type="checkbox" checked style="min-height:0;width:20px;height:20px">Primeira e última linha como Início/Fim</label>' +
+    '<div class="btns"><button type="button" class="ok" id="flGo">Gerar fluxograma</button><button type="button" id="flX">Fechar</button></div>' +
+    '<div style="font-weight:700;margin-top:6px">Ou coloque blocos avulsos</div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:6px">' + Object.keys(KINDS).map(function (k) { return '<button type="button" class="chip" data-k="' + k + '">' + KINDS[k] + '</button>'; }).join('') + '</div>' +
+    '<button type="button" class="opt" id="flC">' + CP.svgIcon('copy') + 'Ligar blocos com setas (modo conectar)</button>';
+  CP.ui.sheetMenu(html, function (h, close) {
+    var bx = h.querySelector('.box'); if (bx) { bx.style.width = 'min(620px,100%)'; bx.style.maxHeight = '90vh'; bx.style.overflow = 'auto'; }
+    h.querySelector('#flGo').addEventListener('click', function () { var v = h.querySelector('#flT').value, a = h.querySelector('#flA').checked; close(); generate(v, a); });
+    h.querySelector('#flX').addEventListener('click', close);
+    CP.$$('[data-k]', h).forEach(function (b) { b.addEventListener('click', function () { close(); single(b.getAttribute('data-k')); }); });
+    h.querySelector('#flC').addEventListener('click', function () { close(); CP.conn.start(); });
+  });
+};
+CP.flow = { generate: generate, single: single, parse: parse };
+})();
+(function () {
+'use strict';
+/* Escrita à mão -> texto digitado (reconhecimento offline com Tesseract; funciona melhor com letra de forma). */
+var CP = window.CP, $ = CP.$, S = CP.S, E = CP.engine, esc = CP.esc;
+var wP = null, worker = null;
+
+function loadScript(src) { return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = function () { var e = new Error('falta ' + src); e.missing = src; rej(e); }; document.head.appendChild(s); }); }
+function head(src) { return fetch(src, { method: 'GET' }).then(function (r) { if (!r.ok) { var e = new Error('http ' + r.status); e.missing = src; throw e; } return r; }); }
+function ensure() {
+  if (worker) return Promise.resolve(worker);
+  if (wP) return wP;
+  var base = new URL('./', location.href).href;
+  wP = Promise.all(['tesseract.min.js', 'tesseract-worker.js', 'tesseract-core.js', 'por.traineddata.gz'].map(head)).then(function () {
+    return window.Tesseract ? null : loadScript(base + 'tesseract.min.js');
+  }).then(function () {
+    return window.Tesseract.createWorker('por', 1, { workerPath: base + 'tesseract-worker.js', corePath: base + 'tesseract-core.js', langPath: base, workerBlobURL: false, cacheMethod: 'none', gzip: true });
+  }).then(function (w) { worker = w; return w; }).catch(function (e) { wP = null; throw e; });
+  return wP;
+}
+
+function bbox(strokes) {
+  var b = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 };
+  strokes.forEach(function (s) { for (var i = 0; i < s.d.length; i += 3) { b.x0 = Math.min(b.x0, s.d[i]); b.x1 = Math.max(b.x1, s.d[i]); b.y0 = Math.min(b.y0, s.d[i + 1]); b.y1 = Math.max(b.y1, s.d[i + 1]); } });
+  return b;
+}
+function raster(strokes, b) {
+  var pad = 30, w = b.x1 - b.x0 + 2 * pad, h = b.y1 - b.y0 + 2 * pad, k = Math.min(2.4, 2600 / Math.max(w, 1));
+  var cv = document.createElement('canvas'); cv.width = Math.max(40, Math.round(w * k)); cv.height = Math.max(40, Math.round(h * k));
+  var c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height);
+  c.strokeStyle = '#000'; c.fillStyle = '#000'; c.lineCap = 'round'; c.lineJoin = 'round';
+  strokes.forEach(function (s) {
+    if (s.k === 'h' || s.cn) return; var d = s.d; c.lineWidth = Math.max(2.5 * k, (s.w || 3) * k * 0.9); c.beginPath();
+    for (var i = 0; i < d.length; i += 3) { var x = (d[i] - b.x0 + pad) * k, y = (d[i + 1] - b.y0 + pad) * k; if (i === 0) c.moveTo(x, y); else c.lineTo(x, y); }
+    if (d.length === 3) c.lineTo((d[0] - b.x0 + pad) * k + .1, (d[1] - b.y0 + pad) * k); c.stroke();
+  });
+  return cv;
+}
+
+function run(strokes) {
+  var n = CP.cur(); if (!n) return;
+  strokes = (strokes || []).filter(function (s) { return s.k !== 'h' && !s.cn; });
+  if (!strokes.length) { CP.toast('Selecione com o laço a escrita que quer converter.'); return; }
+  var b = bbox(strokes), cv = raster(strokes, b);
+  CP.toast('Lendo a escrita… (na primeira vez demora um pouco)');
+  ensure().then(function (w) { return w.recognize(cv); }).then(function (r) {
+    var txt = ((r && r.data && r.data.text) || '').replace(/\s+$/g, '').replace(/^\s+/, '');
+    confirm(strokes, b, txt, r && r.data && r.data.confidence);
+  }).catch(function (e) {
+    CP.toast(e && e.missing ? 'Faltam arquivos do reconhecimento no GitHub: envie tesseract.min.js, tesseract-worker.js, tesseract-core.js e por.traineddata.gz na pasta do Caderno.'
+      : (navigator.onLine === false ? 'Sem internet: abra este recurso uma vez online para guardar os arquivos no aparelho.' : 'Não consegui reconhecer (' + String((e && (e.message || e.name)) || e) + ').'));
+  });
+}
+function confirm(strokes, b, txt, conf) {
+  CP.ui.sheetMenu('<h3>Texto reconhecido</h3><p style="margin:0;color:var(--muted);font-size:13px">' + (conf != null ? 'Confiança do leitor: ' + Math.round(conf) + '%. ' : '') + 'Corrija o que estiver errado antes de trocar. Letra de forma é lida com muito mais acerto que letra cursiva.</p>' +
+    '<textarea id="ocT" rows="6" style="width:100%;box-sizing:border-box;font-size:17px;border-radius:10px;padding:8px">' + esc(txt) + '</textarea>' +
+    '<label style="display:flex;gap:8px;align-items:center;font-size:14px"><input id="ocK" type="checkbox" style="min-height:0;width:20px;height:20px">Manter a escrita original também</label>' +
+    '<div class="btns"><button type="button" class="ok" id="ocOk">Trocar por texto</button><button type="button" id="ocX">Cancelar</button></div>', function (h, close) {
+    h.querySelector('#ocX').addEventListener('click', close);
+    h.querySelector('#ocOk').addEventListener('click', function () {
+      var v = h.querySelector('#ocT').value.replace(/\s+$/g, ''), keep = h.querySelector('#ocK').checked; close();
+      if (!v.trim()) { CP.toast('Nada para inserir.'); return; }
+      apply(strokes, b, v, keep);
+    });
+  });
+}
+function apply(strokes, b, v, keep) {
+  var n = CP.cur(); if (!n) return; var subs = [];
+  if (!keep) {
+    var list = []; n.strokes.forEach(function (s, i) { if (strokes.indexOf(s) >= 0) list.push({ s: s, i: i }); });
+    n.strokes = n.strokes.filter(function (s) { return strokes.indexOf(s) < 0; }); subs.push({ t: 'del', list: list });
+  }
+  var lines = v.split('\n').length, hgt = b.y1 - b.y0, size = Math.max(22, Math.min(44, Math.round(hgt / Math.max(1, lines) * 0.55)));
+  var tw = Math.max(160, Math.min(940, Math.round(Math.max(b.x1 - b.x0, 260)))), x = Math.max(20, Math.min(1000 - tw - 20, Math.round(b.x0)));
+  var tx = { id: CP.uid(), x: x, y: Math.round(b.y0), w: tw, size: size, c: S.pen.c, text: v };
+  n.texts.push(tx); subs.push({ t: 'tadd', tx: tx });
+  E.push({ t: 'multi', list: subs }); if (CP.lasso && CP.lasso.clear) CP.lasso.clear();
+  if (E.placeTexts) E.placeTexts(); E.redraw(); CP.queueSave(n);
+  CP.toast('Trocado por texto digitado. Toque nele para editar.');
+}
+function read(strokes) { var b = bbox(strokes), cv = raster(strokes, b); return ensure().then(function (w) { return w.recognize(cv); }).then(function (r) { return (r && r.data && r.data.text) || ''; }); }
+CP.ocr = { read: read, run: run, ensure: ensure, raster: raster, bbox: bbox };
+})();
+(function () {
+'use strict';
+/* Tradutor (estilo Google Tradutor) e Assistente de IA, ambos usando o texto selecionado. */
+var CP = window.CP, $ = CP.$, S = CP.S, E = CP.engine, A = CP.mathApi, esc = CP.esc;
+
+var LANGS = [['pt-BR', 'Português'], ['en', 'Inglês'], ['es', 'Espanhol'], ['fr', 'Francês'], ['de', 'Alemão'], ['it', 'Italiano'], ['ja', 'Japonês'], ['zh-CN', 'Chinês'], ['ko', 'Coreano'], ['ru', 'Russo'], ['ar', 'Árabe'], ['nl', 'Holandês'], ['tr', 'Turco'], ['hi', 'Hindi'], ['pl', 'Polonês'], ['sv', 'Sueco']];
+function lname(c) { for (var i = 0; i < LANGS.length; i++) if (LANGS[i][0] === c) return LANGS[i][1]; return c; }
+function st(k, v) { try { if (v === undefined) return localStorage.getItem('cp_' + k); if (v === null) localStorage.removeItem('cp_' + k); else localStorage.setItem('cp_' + k, v); } catch (e) { } return null; }
+function J(r) { if (!r.ok) { var e = new Error('http ' + r.status); e.status = r.status; throw e; } return r.json(); }
+function netErr(e) {
+  if (navigator.onLine === false) return 'Sem internet: traduzir e perguntar à IA precisam de conexão.';
+  if (e && e.status === 429) return 'Limite de uso do serviço atingido. Tente de novo mais tarde.';
+  if (e && (e.status === 400 || e.status === 403)) return 'A chave da IA não foi aceita. Confira em Configurar chave.';
+  return 'Não consegui falar com o serviço (' + String((e && e.message) || e) + ').';
+}
+
+/* ---------- texto selecionado ---------- */
+function domSel() { var s = window.getSelection && window.getSelection(), t = s ? String(s.toString()) : ''; var ae = document.activeElement; if (!t && ae && (ae.tagName === 'TEXTAREA' || ae.tagName === 'INPUT') && ae.selectionEnd > ae.selectionStart) t = ae.value.slice(ae.selectionStart, ae.selectionEnd); return t.trim(); }
+function textsOf(strokes) {
+  var n = CP.cur(), g = {}; strokes.forEach(function (s) { if (s.g) g[s.g] = 1; });
+  return n ? n.texts.filter(function (t) { return t.g && g[t.g]; }).map(function (t) { return t.text; }).join('\n') : '';
+}
+/* pega o texto do laço: textos digitados do grupo; se só houver escrita à mão, lê com o reconhecimento */
+function fromLasso(strokes) {
+  var t = textsOf(strokes); if (t.trim()) return Promise.resolve(t.trim());
+  var ink = strokes.filter(function (s) { return s.k !== 'h' && !s.cn; }); if (!ink.length || !CP.ocr) return Promise.resolve('');
+  CP.toast('Lendo a escrita…'); return CP.ocr.read(ink).then(function (x) { return x.trim(); });
+}
+function grabSel() { return domSel(); }
+
+function insertText(txt) {
+  var n = CP.cur(); if (!n || !txt) return; var c = A.viewCenter(), w = 700, size = 28;
+  var tx = A.mkText(txt, Math.max(30, c.x - w / 2), c.y, size, S.pen.c, { w: w });
+  n.texts.push(tx); E.push({ t: 'tadd', tx: tx }); if (E.placeTexts) E.placeTexts(); E.redraw(); CP.queueSave(n); CP.toast('Inserido na nota. Arraste ou toque para editar.');
+}
+function copy(t) { try { navigator.clipboard.writeText(t).then(function () { CP.toast('Copiado.'); }, function () { CP.toast('Não consegui copiar.'); }); } catch (e) { CP.toast('Não consegui copiar.'); } }
+function speak(t, lang) { try { var u = new SpeechSynthesisUtterance(t); u.lang = lang; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) { CP.toast('Este aparelho não consegue ler em voz alta.'); } }
+function wide(h) { var b = h.querySelector('.box'); if (b) { b.style.width = 'min(680px,100%)'; b.style.maxHeight = '92vh'; b.style.overflow = 'auto'; } }
+
+/* ---------- IA (Gemini, chave gratuita do próprio usuário) ---------- */
+var MODEL = function () { return st('aimodel') || 'gemini-flash-latest'; };
+function gemini(contents, sys) {
+  var key = st('aikey'); if (!key) { var e = new Error('sem chave'); e.nokey = true; return Promise.reject(e); }
+  var body = { contents: contents }; if (sys) body.systemInstruction = { parts: [{ text: sys }] };
+  return fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(MODEL()) + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body) }).then(J).then(function (r) {
+    var c = r.candidates && r.candidates[0], t = c && c.content && c.content.parts ? c.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
+    if (!t) throw new Error(r.promptFeedback && r.promptFeedback.blockReason ? 'bloqueado: ' + r.promptFeedback.blockReason : 'resposta vazia'); return t;
+  });
+}
+
+/* ---------- tradução ---------- */
+function chunks(t) {
+  var parts = t.split(/(?<=[.!?\n])\s+/), out = [], cur = '';
+  parts.forEach(function (p) { while (p.length > 440) { if (cur) { out.push(cur); cur = ''; } out.push(p.slice(0, 440)); p = p.slice(440); } if ((cur + ' ' + p).length > 440 && cur) { out.push(cur); cur = p; } else cur = cur ? cur + ' ' + p : p; });
+  if (cur) out.push(cur); return out;
+}
+function mymemory(t, from, to) {
+  var lp = (from === 'auto' ? 'Autodetect' : from) + '|' + to, res = [];
+  return chunks(t).reduce(function (p, c) {
+    return p.then(function () {
+      return fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(c) + '&langpair=' + encodeURIComponent(lp)).then(J).then(function (r) {
+        if (+r.responseStatus !== 200) { var e = new Error(String(r.responseDetails || 'erro')); e.status = +r.responseStatus; throw e; }
+        res.push(r.responseData.translatedText);
+      });
+    });
+  }, Promise.resolve()).then(function () { return res.join(' '); });
+}
+function translate(t, from, to) {
+  if (st('aikey') && st('aitr') !== 'no') return gemini([{ role: 'user', parts: [{ text: t }] }], 'Você é um tradutor profissional. Traduza o texto do usuário ' + (from === 'auto' ? '' : 'de ' + lname(from) + ' ') + 'para ' + lname(to) + '. Responda somente com a tradução, preservando quebras de linha, números e símbolos. Não explique nada.');
+  return mymemory(t, from, to);
+}
+
+CP.translateMenu = function (pre) {
+  var from = st('trfrom') || 'auto', to = st('trto') || 'pt-BR', lastOut = '';
+  function opts(sel, auto) { return (auto ? '<option value="auto"' + (sel === 'auto' ? ' selected' : '') + '>Detectar idioma</option>' : '') + LANGS.map(function (l) { return '<option value="' + l[0] + '"' + (l[0] === sel ? ' selected' : '') + '>' + l[1] + '</option>'; }).join(''); }
+  var html = '<h3>Tradutor</h3>' +
+    '<div style="display:flex;gap:6px;align-items:center"><select id="trF" style="flex:1;min-width:0">' + opts(from, true) + '</select><button type="button" class="chip" id="trSw" aria-label="Trocar idiomas">⇄</button><select id="trT" style="flex:1;min-width:0">' + opts(to, false) + '</select></div>' +
+    '<textarea id="trIn" rows="5" placeholder="Digite, cole ou selecione um texto…" style="width:100%;box-sizing:border-box;font-size:17px;border-radius:10px;padding:8px"></textarea>' +
+    '<div class="btns"><button type="button" class="ok" id="trGo">Traduzir</button><button type="button" id="trX">Fechar</button></div>' +
+    '<div id="trOut" style="min-height:70px;white-space:pre-wrap;font-size:17px;border-radius:10px;padding:10px;background:var(--panel-2)"><span style="color:var(--muted)">A tradução aparece aqui.</span></div>' +
+    '<div id="trAct" style="display:none;gap:6px;flex-wrap:wrap"><button type="button" class="chip" id="trCp">Copiar</button><button type="button" class="chip" id="trIns">Inserir na nota</button><button type="button" class="chip" id="trSp">Ouvir</button><button type="button" class="chip" id="trRep">Trocar o texto pela tradução</button></div>' +
+    '<small style="color:var(--muted)">' + (st('aikey') && st('aitr') !== 'no' ? 'Usando a IA (Gemini) para traduzir.' : 'Tradução gratuita (MyMemory), com limite diário. Com a chave da IA configurada a qualidade melhora.') + ' O texto é enviado ao serviço pela internet.</small>';
+  CP.ui.sheetMenu(html, function (h, close) {
+    wide(h); var inp = h.querySelector('#trIn'), out = h.querySelector('#trOut'), act = h.querySelector('#trAct');
+    inp.value = pre || '';
+    h.querySelector('#trX').addEventListener('click', close);
+    h.querySelector('#trSw').addEventListener('click', function () { var f = h.querySelector('#trF'), t = h.querySelector('#trT'); if (f.value === 'auto') { CP.toast('Escolha o idioma de origem para trocar.'); return; } var a = f.value; f.value = t.value; t.value = a; if (lastOut) { inp.value = lastOut; go(); } });
+    function go() {
+      var t = inp.value.trim(); if (!t) { CP.toast('Escreva ou cole um texto.'); return; }
+      var f = h.querySelector('#trF').value, tt = h.querySelector('#trT').value; st('trfrom', f); st('trto', tt);
+      out.textContent = 'Traduzindo…'; act.style.display = 'none';
+      translate(t, f, tt).then(function (r) { lastOut = r; out.textContent = r; act.style.display = 'flex'; }).catch(function (e) { out.textContent = netErr(e); });
+    }
+    h.querySelector('#trGo').addEventListener('click', go);
+    h.querySelector('#trCp').addEventListener('click', function () { copy(lastOut); });
+    h.querySelector('#trIns').addEventListener('click', function () { insertText(lastOut); });
+    h.querySelector('#trSp').addEventListener('click', function () { speak(lastOut, h.querySelector('#trT').value); });
+    h.querySelector('#trRep').addEventListener('click', function () { CP.toast('Para trocar, selecione o texto original com o laço e use Excluir; depois Inserir na nota.'); });
+    if (pre) go();
+  });
+};
+
+/* ---------- Assistente ---------- */
+var chat = [];
+function keyMenu(back) {
+  CP.ui.sheetMenu('<h3>Chave da IA (grátis)</h3><ol style="margin:0;padding-left:20px;font-size:14px;line-height:1.5"><li>No Safari, abra <b>aistudio.google.com/apikey</b> e entre com sua conta Google.</li><li>Toque em <b>Criar chave de API</b> e copie a chave.</li><li>Cole aqui embaixo.</li></ol>' +
+    '<input id="kK" type="password" autocomplete="off" placeholder="Cole a chave aqui" value="' + esc(st('aikey') || '') + '" style="width:100%;box-sizing:border-box">' +
+    '<label style="display:flex;gap:8px;align-items:center;font-size:14px"><input id="kT" type="checkbox"' + (st('aitr') !== 'no' ? ' checked' : '') + ' style="min-height:0;width:20px;height:20px">Usar a IA também no tradutor</label>' +
+    '<small style="color:var(--muted)">A chave fica só neste aparelho. O texto que você perguntar é enviado ao Google. O plano gratuito tem limite de uso por dia.</small>' +
+    '<div class="btns"><button type="button" class="ok" id="kOk">Salvar</button><button type="button" id="kDel">Remover chave</button><button type="button" id="kX">Fechar</button></div>', function (h, close) {
+    h.querySelector('#kX').addEventListener('click', close);
+    h.querySelector('#kDel').addEventListener('click', function () { st('aikey', null); close(); CP.toast('Chave removida.'); });
+    h.querySelector('#kOk').addEventListener('click', function () { var v = h.querySelector('#kK').value.trim(); if (!v) { CP.toast('Cole a chave.'); return; } st('aikey', v); st('aitr', h.querySelector('#kT').checked ? 'yes' : 'no'); close(); CP.toast('Chave salva.'); if (back) CP.aiMenu(back.ctx); });
+  });
+}
+CP.aiMenu = function (ctx) {
+  if (!st('aikey')) { keyMenu({ ctx: ctx }); return; }
+  var html = '<h3>Assistente de IA</h3>' +
+    '<div id="aiCtx" style="' + (ctx ? '' : 'display:none;') + 'font-size:13px;border-radius:10px;padding:8px;background:var(--panel-2)"><b>Texto selecionado</b> <button type="button" class="chip" id="aiCx">tirar</button><div id="aiCt" style="max-height:80px;overflow:auto;white-space:pre-wrap;color:var(--muted)"></div></div>' +
+    '<div id="aiLog" style="display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto"></div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:6px"><button type="button" class="chip" data-q="Explique de forma simples.">Explicar</button><button type="button" class="chip" data-q="Resuma em poucos tópicos.">Resumir</button><button type="button" class="chip" data-q="Corrija e melhore a redação.">Corrigir texto</button><button type="button" class="chip" data-q="Resolva passo a passo.">Resolver</button></div>' +
+    '<textarea id="aiIn" rows="3" placeholder="Pergunte alguma coisa…" style="width:100%;box-sizing:border-box;font-size:17px;border-radius:10px;padding:8px"></textarea>' +
+    '<div class="btns"><button type="button" class="ok" id="aiGo">Enviar</button><button type="button" id="aiNew">Nova conversa</button><button type="button" id="aiKey">Chave</button><button type="button" id="aiX">Fechar</button></div>';
+  CP.ui.sheetMenu(html, function (h, close) {
+    wide(h); var log = h.querySelector('#aiLog'), inp = h.querySelector('#aiIn'), busy = false;
+    if (ctx) h.querySelector('#aiCt').textContent = ctx.length > 600 ? ctx.slice(0, 600) + '…' : ctx;
+    h.querySelector('#aiCx').addEventListener('click', function () { ctx = ''; h.querySelector('#aiCtx').style.display = 'none'; });
+    function bubble(role, t, ans) {
+      var d = document.createElement('div'); d.style.cssText = 'padding:8px 10px;border-radius:12px;white-space:pre-wrap;font-size:16px;' + (role === 'user' ? 'background:var(--accent);color:#fff;align-self:flex-end;max-width:90%' : 'background:var(--panel-2);align-self:flex-start;max-width:96%');
+      d.textContent = t;
+      if (ans) { var r = document.createElement('div'); r.style.cssText = 'display:flex;gap:6px;margin-top:6px'; [['Copiar', function () { copy(t); }], ['Inserir na nota', function () { insertText(t); }]].forEach(function (b) { var x = document.createElement('button'); x.type = 'button'; x.className = 'chip'; x.textContent = b[0]; x.addEventListener('click', b[1]); r.appendChild(x); }); d.appendChild(r); }
+      log.appendChild(d); log.scrollTop = log.scrollHeight; return d;
+    }
+    chat.forEach(function (m) { bubble(m.role === 'user' ? 'user' : 'ai', m.shown || m.parts[0].text, m.role !== 'user'); });
+    function send(q) {
+      if (busy) return; q = (q || '').trim(); if (!q) return; busy = true;
+      var full = ctx ? 'Texto selecionado no meu caderno:\n"""\n' + ctx + '\n"""\n\n' + q : q; ctx = '';
+      var cx = h.querySelector('#aiCtx'); if (cx) cx.style.display = 'none';
+      chat.push({ role: 'user', parts: [{ text: full }], shown: q }); bubble('user', q); inp.value = '';
+      var wait = bubble('ai', 'Pensando…');
+      gemini(chat.slice(-12).map(function (m) { return { role: m.role, parts: m.parts }; }), 'Você é um assistente dentro de um app de anotações usado por um professor e engenheiro de automação brasileiro. Responda em português do Brasil, de forma direta e organizada, com texto simples (sem markdown pesado), a menos que o usuário peça outro idioma.').then(function (t) {
+        chat.push({ role: 'model', parts: [{ text: t }] }); wait.remove(); bubble('ai', t, true); busy = false;
+      }).catch(function (e) { chat.pop(); wait.textContent = netErr(e); busy = false; });
+    }
+    h.querySelector('#aiGo').addEventListener('click', function () { send(inp.value); });
+    CP.$$('[data-q]', h).forEach(function (b) { b.addEventListener('click', function () { send(b.getAttribute('data-q')); }); });
+    h.querySelector('#aiNew').addEventListener('click', function () { chat = []; log.innerHTML = ''; });
+    h.querySelector('#aiKey').addEventListener('click', function () { close(); keyMenu({ ctx: ctx }); });
+    h.querySelector('#aiX').addEventListener('click', close);
+  });
+};
+
+/* entradas: ferramentas (usam a seleção de texto) e laço */
+CP.trSelection = function () { CP.translateMenu(grabSel()); };
+CP.aiSelection = function () { CP.aiMenu(grabSel()); };
+CP.lassoTranslate = function (strokes) { fromLasso(strokes).then(function (t) { if (!t) CP.toast('Não achei texto nessa seleção.'); else CP.translateMenu(t); }); };
+CP.lassoAI = function (strokes) { fromLasso(strokes).then(function (t) { CP.aiMenu(t || ''); }); };
+CP.aiApi = { chunks: chunks, translate: translate };
 })();
 (function () {
 'use strict';
