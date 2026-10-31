@@ -131,6 +131,11 @@ svg { display: block; }
 .tbox { position: absolute; min-width: 80px; pointer-events: none; border: 1.5px dashed transparent; border-radius: 8px; padding: 4px 6px 4px 6px; }
 .tbox.sel { border-color: var(--accent); background: rgba(47,91,234,.05); }
 .tbox .tx { outline: none; min-height: 1.2em; white-space: pre-wrap; word-break: break-word; font-family: var(--font-ui); line-height: 1.35; user-select: text; -webkit-user-select: text; color: var(--paper-ink); }
+.tbox .fmt { display: none; position: absolute; left: 18px; top: -46px; gap: 4px; background: var(--panel); border: 1px solid var(--line, rgba(0,0,0,.12)); border-radius: 12px; padding: 3px; box-shadow: var(--shadow); z-index: 4; pointer-events: auto; white-space: nowrap; }
+.tbox .fmt.low { top: auto; bottom: -46px; }
+.tbox .fmt button { min-height: 36px; padding: 4px 10px; border-radius: 9px; font-size: 15px; font-weight: 700; color: var(--ink); background: var(--panel-2); }
+.tbox .fmt .fn { max-width: 170px; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.tbox.sel .fmt { display: flex; }
 .tbox .sv { display: none; position: absolute; right: 0; bottom: -40px; background: var(--accent); color: #fff; border-radius: 12px; padding: 8px 14px; font-weight: 700; font-size: 14px; min-height: 36px; box-shadow: var(--shadow); z-index: 3; pointer-events: auto; }
 .tbox:not(.sel) .sv { display: none !important; }
 .tbox .grip { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; border-radius: 14px; background: var(--accent); display: none; place-items: center; touch-action: none; }
@@ -634,7 +639,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&
 window.CP = { $: $, $$: $$, S: S, icon: icon, svgIcon: svgIcon, paintIcons: paintIcons, COLORS: COLORS, HL_COLORS: HL_COLORS, PAPERS: PAPERS,
   PAGE_W: PAGE_W, PAGE_H: PAGE_H, uid: uid, newNote: newNote, byId: byId, cur: cur, queueSave: queueSave, flushSave: flushSave,
   persistLocal: persistLocal, persistMeta: persistMeta, deleteForever: deleteForever, initStore: initStore, toast: toast,
-  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v35' };
+  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v36' };
 })();
 (function () {
 'use strict';
@@ -1065,9 +1070,42 @@ function endPan() {
 
 /* ---------- Caixas de texto ---------- */
 function fontSize() { return 20 + S.pen.w * 4; }
+/* Fontes de texto (todas já vêm no iPad, funcionam sem internet) */
+var FONTS = [
+  ['sys', 'Padrão', '-apple-system, "Segoe UI", sans-serif', 'sans-serif'],
+  ['hel', 'Helvetica', '"Helvetica Neue", Helvetica, Arial, sans-serif', 'Helvetica, sans-serif'],
+  ['ver', 'Verdana', 'Verdana, Geneva, sans-serif', 'Verdana, sans-serif'],
+  ['tre', 'Trebuchet', '"Trebuchet MS", sans-serif', 'Trebuchet MS, sans-serif'],
+  ['fut', 'Futura', 'Futura, "Century Gothic", sans-serif', 'Futura, sans-serif'],
+  ['ave', 'Avenir', '"Avenir Next", Avenir, sans-serif', 'Avenir Next, sans-serif'],
+  ['geo', 'Georgia', 'Georgia, serif', 'Georgia, serif'],
+  ['tim', 'Times', '"Times New Roman", Times, serif', 'Times New Roman, serif'],
+  ['pal', 'Palatino', 'Palatino, "Palatino Linotype", serif', 'Palatino, serif'],
+  ['did', 'Didot', 'Didot, "Bodoni 72", serif', 'Didot, serif'],
+  ['cou', 'Courier', '"Courier New", Courier, monospace', 'Courier New, monospace'],
+  ['typ', 'Máquina de escrever', '"American Typewriter", "Courier New", serif', 'American Typewriter, serif'],
+  ['mar', 'Marcador', '"Marker Felt", "Comic Sans MS", cursive', 'Marker Felt, cursive'],
+  ['bra', 'Manuscrita', '"Bradley Hand", "Noteworthy", cursive', 'Bradley Hand, cursive'],
+  ['cha', 'Giz', '"Chalkboard SE", "Comic Sans MS", cursive', 'Chalkboard SE, cursive'],
+  ['scr', 'Caligrafia', '"Snell Roundhand", "Apple Chancery", cursive', 'Snell Roundhand, cursive']
+];
+function fontOf(k) { for (var i = 0; i < FONTS.length; i++) if (FONTS[i][0] === k) return FONTS[i]; return FONTS[0]; }
+CP.fonts = { list: FONTS, get: fontOf, css: function (t) { return t && t.mono ? 'Menlo, ui-monospace, monospace' : fontOf(t && t.ff)[2]; }, svg: function (t) { return t && t.mono ? 'monospace' : fontOf(t && t.ff)[3]; } };
+function fontMenu(tx) {
+  var esc = CP.esc;
+  CP.ui.sheetMenu('<h3>Fonte do texto</h3><div style="display:flex;flex-direction:column;gap:6px;max-height:52vh;overflow:auto">' + FONTS.map(function (f) {
+    return '<button type="button" class="opt" data-f="' + f[0] + '" style="font-family:' + f[2].replace(/"/g, '&quot;') + ';font-size:20px;text-align:left;' + ((tx.ff || 'sys') === f[0] ? 'outline:2px solid var(--accent);' : '') + '">' + esc(f[1]) + ' <span style="font-size:15px;color:var(--muted)">Aa Bb 123</span></button>';
+  }).join('') + '</div><button type="button" class="opt" id="fnX">Fechar</button>', function (h, close) {
+    h.querySelector('#fnX').addEventListener('click', close);
+    Array.prototype.forEach.call(h.querySelectorAll('[data-f]'), function (b) {
+      b.addEventListener('click', function () { tx.ff = b.getAttribute('data-f'); S.textFont = tx.ff; close(); placeTexts(); CP.queueSave(note()); setTimeout(function () { var q = texts.querySelector('[data-id="' + tx.id + '"] .tx'); if (q) q.focus(); }, 60); });
+    });
+  });
+}
 function createText(e) {
   var n = note(), q = E.toLogical(e);
   var tx = { id: CP.uid(), x: Math.max(10, Math.round(q.x)), y: Math.max(10, Math.round(q.y - 20)), w: 420, size: fontSize(), c: S.pen.c, text: '' };
+  if (S.textFont && S.textFont !== 'sys') tx.ff = S.textFont;
   n.texts.push(tx); undoSt.push({ t: 'tadd', tx: tx }); redoSt = [];
   placeTexts();
   var box = texts.querySelector('[data-id="' + tx.id + '"] .tx'); if (box) box.focus();
@@ -1082,6 +1120,7 @@ function placeTexts() {
     b.style.left = tx.x * sc + 'px'; b.style.top = tx.y * sc + 'px'; b.style.width = tx.w * sc + 'px';
     var t = document.createElement('div'); t.className = 'tx'; t.contentEditable = 'true'; t.spellcheck = false;
     t.style.fontSize = tx.size * sc + 'px'; t.style.color = tx.c; t.textContent = tx.text; if (tx.al === 'c') t.style.textAlign = 'center';
+    if (tx.ff && !tx.mono) t.style.fontFamily = fontOf(tx.ff)[2];
     if (tx.mono) { t.style.fontFamily = 'ui-monospace, Menlo, Consolas, monospace'; t.style.whiteSpace = 'pre'; t.style.lineHeight = '1.3'; t.style.overflowX = 'auto'; }
     var g = document.createElement('div'); g.className = 'grip'; g.innerHTML = CP.svgIcon('move');
     var d = document.createElement('button'); d.className = 'del'; d.type = 'button'; d.setAttribute('aria-label', 'Excluir texto'); d.innerHTML = CP.svgIcon('x');
@@ -1089,6 +1128,17 @@ function placeTexts() {
     function updSv() { sv.style.display = (!tx.sol && CP.math && CP.math.looksMath(tx.text)) || (tx.sol && CP.math && CP.math.looksMath(tx.text)) ? 'block' : 'none'; }
     sv.addEventListener('pointerdown', function (ev) { ev.preventDefault(); ev.stopPropagation(); if (CP.autoSolve) CP.autoSolve(tx, true); });
     b.appendChild(g); b.appendChild(d); b.appendChild(sv); b.appendChild(t); texts.appendChild(b); updSv();
+    if (!tx.mono) {
+      var fb = document.createElement('div'); fb.className = 'fmt' + (tx.y * sc < 56 ? ' low' : '');
+      var fn = document.createElement('button'); fn.type = 'button'; fn.className = 'fn'; fn.textContent = fontOf(tx.ff)[1] + ' ▾'; fn.style.fontFamily = fontOf(tx.ff)[2];
+      var fm = document.createElement('button'); fm.type = 'button'; fm.textContent = 'A−'; fm.setAttribute('aria-label', 'Diminuir letra');
+      var fp = document.createElement('button'); fp.type = 'button'; fp.textContent = 'A+'; fp.setAttribute('aria-label', 'Aumentar letra');
+      [fn, fm, fp].forEach(function (x) { x.addEventListener('pointerdown', function (ev) { ev.preventDefault(); ev.stopPropagation(); }); });
+      function bump(k) { return function () { tx.size = Math.max(10, Math.min(120, Math.round(tx.size * k))); t.style.fontSize = tx.size * E.scale() + 'px'; CP.queueSave(note()); }; }
+      fm.addEventListener('click', bump(0.89)); fp.addEventListener('click', bump(1.12));
+      fn.addEventListener('click', function () { fontMenu(tx); });
+      fb.appendChild(fn); fb.appendChild(fm); fb.appendChild(fp); b.appendChild(fb);
+    }
     t.addEventListener('focus', function () { $$sel(); b.classList.add('sel'); });
     t.addEventListener('input', function () { tx.text = t.innerText; CP.queueSave(note()); updSv(); });
     t.addEventListener('blur', function () { setTimeout(function () { if (!b.contains(document.activeElement)) b.classList.remove('sel'); }, 150); if (!tx.text.trim()) { dropText(tx); } else if (CP.autoSolve) CP.autoSolve(tx, false); });
@@ -1962,7 +2012,7 @@ function compose(n, k, page) {
   n.strokes.forEach(function (s) { if (s.k !== 'h' && vis(s)) E.drawStroke(c, s); });
   E.setDark(CP.isDark(CP.cur()));
   n.texts.forEach(function (t) {
-    c.fillStyle = dark && t.c === '#14171c' ? '#f2f4f8' : t.c; c.font = t.size + 'px ' + (t.mono ? 'Menlo, ui-monospace, monospace' : FONT); c.textBaseline = 'alphabetic';
+    c.fillStyle = dark && t.c === '#14171c' ? '#f2f4f8' : t.c; c.font = t.size + 'px ' + CP.fonts.css(t); c.textBaseline = 'alphabetic';
     if (t.mono) { String(t.text).split('\n').forEach(function (ln, i) { c.fillText(ln, t.x + 6, t.y + 4 + t.size + i * t.size * 1.3); }); } else wrap(c, t.text, t.x + 6, t.y + 4 + t.size, t.w - 12, t.size * 1.35);
   });
   return cv;
@@ -2013,7 +2063,7 @@ function buildSvg(n) {
   n.strokes.forEach(function (s) { if (s.k === 'h' && vis(s)) out.push(stroke(s)); });
   n.strokes.forEach(function (s) { if (s.k !== 'h' && vis(s)) out.push(stroke(s)); });
   n.texts.forEach(function (t) {
-    String(t.text).split('\n').forEach(function (line, i) { out.push('<text x="' + (t.x + 6) + '" y="' + (t.y + 4 + t.size * (1 + i * 1.35)) + '" font-family="' + (t.mono ? 'monospace' : 'sans-serif') + '" xml:space="preserve" font-size="' + t.size + '" fill="' + CP.esc(col(t.c)) + '">' + CP.esc(line) + '</text>'); });
+    String(t.text).split('\n').forEach(function (line, i) { out.push('<text x="' + (t.x + 6) + '" y="' + (t.y + 4 + t.size * (1 + i * 1.35)) + '" font-family="' + CP.esc(CP.fonts.svg(t)) + '" xml:space="preserve" font-size="' + t.size + '" fill="' + CP.esc(col(t.c)) + '">' + CP.esc(line) + '</text>'); });
   });
   out.push('</svg>');
   return Promise.resolve(new Blob([out.join('\n')], { type: 'image/svg+xml' }));
@@ -5235,7 +5285,7 @@ function dxfAci(hex) {
 function exportSVG() {
   var D = cadData(), n = D.n, out = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + D.W + ' ' + D.H + '" width="' + (D.W * 0.21).toFixed(1) + 'mm" height="' + (D.H * 0.21).toFixed(1) + 'mm" fill="none" stroke-linecap="round" stroke-linejoin="round">'];
   n.strokes.forEach(function (s) { var d = s.d, p = '', i; for (i = 0; i < d.length; i += 3) p += (i ? 'L' : 'M') + (Math.round(d[i] * 10) / 10) + ' ' + (Math.round(d[i + 1] * 10) / 10); out.push('<path d="' + p + '" stroke="' + (s.c || '#000') + '" stroke-width="' + (s.w || 3) + '"' + (s.k === 'h' ? ' stroke-opacity="0.35"' : '') + '/>'); });
-  n.texts.forEach(function (t) { String(t.text || '').split('\n').forEach(function (ln, i) { out.push('<text x="' + t.x + '" y="' + Math.round(t.y + t.size * (1.05 + i * 1.3)) + '" font-size="' + t.size + '" fill="' + (t.c || '#000') + '" stroke="none" font-family="' + (t.mono ? 'monospace' : 'sans-serif') + '" xml:space="preserve">' + ln.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</text>'); }); });
+  n.texts.forEach(function (t) { String(t.text || '').split('\n').forEach(function (ln, i) { out.push('<text x="' + t.x + '" y="' + Math.round(t.y + t.size * (1.05 + i * 1.3)) + '" font-size="' + t.size + '" fill="' + (t.c || '#000') + '" stroke="none" font-family="' + CP.esc(CP.fonts.svg(t)) + '" xml:space="preserve">' + ln.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</text>'); }); });
   out.push('</svg>'); return new Blob([out.join('\n')], { type: 'image/svg+xml' });
 }
 function exportDXF() {
