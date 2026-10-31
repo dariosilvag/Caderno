@@ -1,5 +1,5 @@
-var V = 'caderno-v22';
-var FILES = ['./', 'index.html', 'vendor3d.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
+var V = 'caderno-v24';
+var FILES = ['./', 'index.html', 'vendor3d.js', 'manifest.webmanifest', 'logo-180.png', 'logo-192.png', 'logo-512.png'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(V).then(function (c) { return c.addAll(FILES).then(function () { return Promise.all(['vendorpdf.js', 'pdf.worker.js', 'tesseract.min.js', 'tesseract-worker.js', 'tesseract-core.js', 'por.traineddata.gz'].map(function (f) { return c.add(f).catch(function () {}); })); }); }).then(function () { return self.skipWaiting(); }));

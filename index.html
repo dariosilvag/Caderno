@@ -9,8 +9,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#e9ecf1">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icon-180.png">
-<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="logo-180.png">
+<link rel="icon" type="image/png" href="logo-192.png">
 <style>[hidden]{display:none!important}img{max-width:100%}:root{color-scheme:light}body{margin:0}</style>
 <title>Caderno Pencil</title>
 <style>
@@ -65,7 +65,7 @@ svg { display: block; }
 /* Sidebar */
 #side { background: var(--panel-2); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; padding-top: max(14px, env(safe-area-inset-top, 0px)); }
 .brand { padding: 6px 18px 14px; font-family: var(--font-title); font-weight: 600; font-size: 24px; letter-spacing: -.01em; display: flex; align-items: center; gap: 10px; }
-.brand i { width: 26px; height: 26px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; color: #fff; }
+.brand i { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(180deg,#2c303c,#0e1016); display: grid; place-items: center; color: #fff; }
 .brand i .ico { width: 15px; height: 15px; stroke: #fff; }
 .folders { flex: 1; overflow-y: auto; padding: 0 10px; display: flex; flex-direction: column; gap: 2px; }
 .folder { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; text-align: left; width: 100%; min-height: 44px; }
@@ -288,7 +288,7 @@ html, body { overflow: hidden; }
 #popPaper { bottom: auto; top: calc(env(safe-area-inset-top, 0px) + 64px); left: auto; right: 10px; transform: none; max-height: calc(100vh - 90px); overflow: auto; }
 </style></head><body><div id="app" data-view="list">
   <aside id="side" aria-label="Pastas">
-    <div class="brand"><i><svg class="ico" data-ico="pen"></svg></i>Caderno <span id="verTag" class="vtag"></span></div>
+    <div class="brand"><i><svg viewBox="0 0 26 26" width="26" height="26" aria-hidden="true"><path d="M5 15c2-5 4.2-6.5 6-5.2 2 1.5 3 6.2 5 5.2 1.4-.7 2.4-1.8 4-3" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></i>Caderno <span id="verTag" class="vtag"></span></div>
     <nav class="folders" id="folders"></nav>
     <div class="side-foot">
       <button id="btnNewFolder" type="button"><svg class="ico" data-ico="folderplus"></svg>Nova pasta</button>
@@ -602,7 +602,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&
 window.CP = { $: $, $$: $$, S: S, icon: icon, svgIcon: svgIcon, paintIcons: paintIcons, COLORS: COLORS, HL_COLORS: HL_COLORS, PAPERS: PAPERS,
   PAGE_W: PAGE_W, PAGE_H: PAGE_H, uid: uid, newNote: newNote, byId: byId, cur: cur, queueSave: queueSave, flushSave: flushSave,
   persistLocal: persistLocal, persistMeta: persistMeta, deleteForever: deleteForever, initStore: initStore, toast: toast,
-  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v22' };
+  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v24' };
 })();
 (function () {
 'use strict';
@@ -2758,7 +2758,7 @@ CP.pickNoteFile = function () { CP.pickFile('', function (f) { CP.openNoteFile(f
 'use strict';
 var CP = window.CP, $ = CP.$, S = CP.S;
 CP.diag = function () {
-  var list = ['index.html', 'sw.js', 'vendor3d.js', 'vendorpdf.js', 'pdf.worker.js', 'manifest.webmanifest', 'icon-192.png'];
+  var list = ['index.html', 'sw.js', 'vendor3d.js', 'vendorpdf.js', 'pdf.worker.js', 'manifest.webmanifest', 'logo-192.png'];
   CP.ui.sheetMenu('<h3>Diagnóstico · Caderno ' + CP.VERSION + '</h3><div id="dgL" style="font-size:15px;line-height:1.7">Verificando arquivos do site…</div><button type="button" class="opt" id="dgX">Fechar</button>', function (h, close) {
     h.querySelector('#dgX').addEventListener('click', close);
     Promise.all(list.map(function (f) {
@@ -5216,12 +5216,13 @@ function raster(strokes, b, target) {
 }
 /* separa a escrita em linhas (de cima para baixo) */
 function lines(strokes) {
-  var info = strokes.map(function (s) { var b = bbox([s]); return { s: s, b: b, cy: (b.y0 + b.y1) / 2, h: b.y1 - b.y0 }; }).sort(function (a, c) { return a.cy - c.cy; });
-  var hs = info.map(function (o) { return o.h; }).sort(function (a, c) { return a - c; }), med = hs[Math.floor(hs.length / 2)] || 20;
+  var raw = strokes.map(function (s) { return { s: s, b: bbox([s]) }; }), hs = raw.map(function (o) { return o.b.y1 - o.b.y0; }).sort(function (a, c) { return a - c; }), med = Math.max(8, hs[Math.floor(hs.length / 2)] || 8);
+  var info = raw.map(function (o) { var cy = (o.b.y0 + o.b.y1) / 2, y0 = Math.min(o.b.y0, cy - med * 0.25), y1 = Math.max(o.b.y1, cy + med * 0.25); return { s: o.s, y0: y0, y1: y1, cy: cy }; }).sort(function (a, c) { return a.cy - c.cy; });
   var out = [], cur = null;
   info.forEach(function (o) {
-    if (cur && o.cy <= cur.y1 - (cur.y1 - cur.y0) * 0.15 + med * 0.25 && o.cy >= cur.y0 - med * 0.4) { cur.list.push(o.s); cur.y0 = Math.min(cur.y0, o.b.y0); cur.y1 = Math.max(cur.y1, o.b.y1); }
-    else { cur = { list: [o.s], y0: o.b.y0, y1: o.b.y1 }; out.push(cur); }
+    var ov = cur ? Math.min(cur.y1, o.y1) - Math.max(cur.y0, o.y0) : -1;
+    if (cur && ov > 0.4 * Math.min(o.y1 - o.y0, cur.y1 - cur.y0)) { cur.list.push(o.s); cur.y0 = Math.min(cur.y0, o.y0); cur.y1 = Math.max(cur.y1, o.y1); }
+    else { cur = { list: [o.s], y0: o.y0, y1: o.y1 }; out.push(cur); }
   });
   return out.map(function (l) { return l.list; });
 }
@@ -5263,11 +5264,19 @@ function run(strokes) {
 }
 function confirm(strokes, b, txt, r) {
   var conf = r && r.conf, eng = r && r.engine;
-  CP.ui.sheetMenu('<h3>Texto reconhecido</h3><p style="margin:0;color:var(--muted);font-size:13px">' + (conf != null ? 'Confiança do leitor: ' + Math.round(conf) + '%. ' : '') + 'Corrija o que estiver errado antes de trocar. Letra de forma é lida com muito mais acerto que letra cursiva.</p>' +
+    var ai = eng === 'ia';
+  CP.ui.sheetMenu('<h3>Texto reconhecido</h3><p style="margin:0;color:var(--muted);font-size:13px">' + (ai ? 'Lido pela IA. ' : (r && r.fallback ? 'A IA não respondeu; usei o leitor offline. ' : 'Leitor offline' + (conf != null ? ' (confiança ' + Math.round(conf) + '%)' : '') + ' — só acerta bem letra de forma bem separada. ')) + 'Corrija o que estiver errado antes de trocar.</p>' +
     '<textarea id="ocT" rows="6" style="width:100%;box-sizing:border-box;font-size:17px;border-radius:10px;padding:8px">' + esc(txt) + '</textarea>' +
+    (ai ? '' : '<button type="button" class="opt" id="ocAI">' + CP.svgIcon('calc') + (hasKey() ? 'Tentar de novo com a IA (lê bem letra cursiva)' : 'Ler com a IA — configurar chave grátis') + '</button>') +
     '<label style="display:flex;gap:8px;align-items:center;font-size:14px"><input id="ocK" type="checkbox" style="min-height:0;width:20px;height:20px">Manter a escrita original também</label>' +
     '<div class="btns"><button type="button" class="ok" id="ocOk">Trocar por texto</button><button type="button" id="ocX">Cancelar</button></div>', function (h, close) {
     h.querySelector('#ocX').addEventListener('click', close);
+    var bt = h.querySelector('#ocAI');
+    if (bt) bt.addEventListener('click', function () {
+      close();
+      function go() { CP.toast('Lendo a escrita com a IA…'); viaAI(strokes).then(function (x) { confirm(strokes, b, x.text, x); }).catch(function (e) { CP.toast('A IA não respondeu (' + String((e && e.message) || e) + ').'); }); }
+      if (hasKey()) go(); else CP.aiKeyMenu(go);
+    });
     h.querySelector('#ocOk').addEventListener('click', function () {
       var v = h.querySelector('#ocT').value.replace(/\s+$/g, ''), keep = h.querySelector('#ocK').checked; close();
       if (!v.trim()) { CP.toast('Nada para inserir.'); return; }
@@ -5404,7 +5413,7 @@ function keyMenu(back) {
     '<div class="btns"><button type="button" class="ok" id="kOk">Salvar</button><button type="button" id="kDel">Remover chave</button><button type="button" id="kX">Fechar</button></div>', function (h, close) {
     h.querySelector('#kX').addEventListener('click', close);
     h.querySelector('#kDel').addEventListener('click', function () { st('aikey', null); close(); CP.toast('Chave removida.'); });
-    h.querySelector('#kOk').addEventListener('click', function () { var v = h.querySelector('#kK').value.trim(); if (!v) { CP.toast('Cole a chave.'); return; } st('aikey', v); st('aitr', h.querySelector('#kT').checked ? 'yes' : 'no'); close(); CP.toast('Chave salva.'); if (back) CP.aiMenu(back.ctx); });
+    h.querySelector('#kOk').addEventListener('click', function () { var v = h.querySelector('#kK').value.trim(); if (!v) { CP.toast('Cole a chave.'); return; } st('aikey', v); st('aitr', h.querySelector('#kT').checked ? 'yes' : 'no'); close(); CP.toast('Chave salva.'); if (back && back.cb) back.cb(); else if (back) CP.aiMenu(back.ctx); });
   });
 }
 CP.aiMenu = function (ctx) {
@@ -5449,6 +5458,7 @@ CP.trSelection = function () { CP.translateMenu(grabSel()); };
 CP.aiSelection = function () { CP.aiMenu(grabSel()); };
 CP.lassoTranslate = function (strokes) { fromLasso(strokes).then(function (t) { if (!t) CP.toast('Não achei texto nessa seleção.'); else CP.translateMenu(t); }); };
 CP.lassoAI = function (strokes) { fromLasso(strokes).then(function (t) { CP.aiMenu(t || ''); }); };
+CP.aiKeyMenu = function (cb) { keyMenu({ cb: cb }); };
 CP.aiApi = { chunks: chunks, translate: translate, vision: vision, gemini: gemini };
 })();
 (function () {
