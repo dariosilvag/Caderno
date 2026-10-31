@@ -284,6 +284,7 @@ html, body { overflow: hidden; }
 .vtag{font:600 12px/1 system-ui,sans-serif;background:var(--accent,#7c8cff);color:#fff;border-radius:8px;padding:3px 7px;margin-left:8px;vertical-align:middle}.vtag.bad{background:#e5484d}
 .connbar{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:center;max-width:94vw;padding:8px 10px;border-radius:16px;background:var(--panel);box-shadow:0 6px 24px rgba(0,0,0,.28);font-size:14px}.connbar .cmsg{font-weight:600;padding:0 6px}.connbar button{min-height:40px;padding:0 12px;border-radius:12px;background:var(--panel-2);color:var(--ink);font-weight:600}.connbar button.on{background:#2f5bea;color:#fff}.connbar button.ok{background:#16a34a;color:#fff}
 .chide{display:none!important}
+#popPaper { bottom: auto; top: calc(env(safe-area-inset-top, 0px) + 64px); left: auto; right: 10px; transform: none; max-height: calc(100vh - 90px); overflow: auto; }
 </style></head><body><div id="app" data-view="list">
   <aside id="side" aria-label="Pastas">
     <div class="brand"><i><svg class="ico" data-ico="pen"></svg></i>Caderno <span id="verTag" class="vtag"></span></div>
@@ -318,6 +319,7 @@ html, body { overflow: hidden; }
         <button class="ibtn" id="btnUndo" type="button" aria-label="Desfazer"><svg class="ico" data-ico="undo"></svg></button>
         <button class="ibtn" id="btnRedo" type="button" aria-label="Refazer"><svg class="ico" data-ico="redo"></svg></button>
         <button class="ibtn" id="btnExpTop" type="button" aria-label="Exportar (PDF, imagem…)"><svg class="ico" data-ico="download"></svg></button>
+        <button class="ibtn" id="btnPaper" type="button" aria-label="Papel e entrada"><svg class="ico" data-ico="paper"></svg></button>
         <button class="ibtn" id="btnFav" type="button" aria-label="Favoritar"><svg class="ico" data-ico="star"></svg></button>
         <button class="ibtn" id="btnMore" type="button" aria-label="Mais opções"><svg class="ico" data-ico="more"></svg></button>
       </div>
@@ -380,7 +382,6 @@ html, body { overflow: hidden; }
         <span class="sep sc"></span>
         <button class="tool" id="btnTools" type="button" aria-label="Ferramentas: régua, páginas, áudio, PDF"><svg class="ico" data-ico="tools"></svg></button>
         <button class="tool" id="btnInsert" type="button" aria-label="Inserir tabela, modelo 3D ou imagem"><svg class="ico" data-ico="plus"></svg></button>
-        <button class="tool" id="btnPaper" type="button" aria-label="Papel e entrada"><svg class="ico" data-ico="paper"></svg></button>
       </div>
     </div>
   </main>
@@ -600,7 +601,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&
 window.CP = { $: $, $$: $$, S: S, icon: icon, svgIcon: svgIcon, paintIcons: paintIcons, COLORS: COLORS, HL_COLORS: HL_COLORS, PAPERS: PAPERS,
   PAGE_W: PAGE_W, PAGE_H: PAGE_H, uid: uid, newNote: newNote, byId: byId, cur: cur, queueSave: queueSave, flushSave: flushSave,
   persistLocal: persistLocal, persistMeta: persistMeta, deleteForever: deleteForever, initStore: initStore, toast: toast,
-  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v17' };
+  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v18' };
 })();
 (function () {
 'use strict';
@@ -4890,7 +4891,7 @@ S.custom = S.custom || { hide: [], dock: {}, tools: [] };
 var DOCK = [
   ['pen', 'Caneta', 'pen', 'A'], ['hl', 'Marca-texto', 'hl', 'A'], ['eraser', 'Borracha', 'eraser', 'A'], ['text', 'Texto', 'type', 'A'], ['select', 'Selecionar objetos', 'cursor', 'A'], ['lasso', 'Laço', 'lasso', 'A'],
   ['colors', 'Cores rápidas', 'paper', 'B'], ['curcol', 'Cor e espessura', 'paper', 'B'],
-  ['tools', 'Ferramentas (fixo)', 'tools', 'C'], ['insert', 'Inserir (+)', 'plus', 'C'], ['paper', 'Papel e entrada', 'paper', 'C']
+  ['tools', 'Ferramentas (fixo)', 'tools', 'C'], ['insert', 'Inserir (+)', 'plus', 'C']
 ];
 var TOOLS = [
   ['web', 'Navegador', 'globe'], ['shapes', 'Formas', 'shapes'], ['eng', 'Engenharia', 'tools'], ['solve', 'Resolver', 'calc'], ['auto', 'Auto-resolver', 'calc'], ['graph', 'Gráfico', 'chart'], ['ruler', 'Régua', 'ruler'], ['proto', 'Transferidor', 'angle'],
@@ -4900,7 +4901,7 @@ CP.TOOL_KEYS = TOOLS.map(function (t) { return t[0]; });
 function C() { var c = S.custom; if (!c || typeof c !== 'object') c = S.custom = { hide: [], dock: {}, tools: [] }; c.hide = c.hide || []; c.dock = c.dock || {}; c.tools = c.tools || []; return c; }
 function hidden(k) { return C().hide.indexOf(k) >= 0; }
 function elOf(k) {
-  if (k === 'colors') return $('#dockColors'); if (k === 'curcol') return $('#curCol'); if (k === 'tools') return $('#btnTools'); if (k === 'insert') return $('#btnInsert'); if (k === 'paper') return $('#btnPaper');
+  if (k === 'colors') return $('#dockColors'); if (k === 'curcol') return $('#curCol'); if (k === 'tools') return $('#btnTools'); if (k === 'insert') return $('#btnInsert');
   return document.querySelector('#dock [data-tool="' + k + '"]');
 }
 function groupKeys(g) {
