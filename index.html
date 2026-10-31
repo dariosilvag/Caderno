@@ -634,7 +634,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&
 window.CP = { $: $, $$: $$, S: S, icon: icon, svgIcon: svgIcon, paintIcons: paintIcons, COLORS: COLORS, HL_COLORS: HL_COLORS, PAPERS: PAPERS,
   PAGE_W: PAGE_W, PAGE_H: PAGE_H, uid: uid, newNote: newNote, byId: byId, cur: cur, queueSave: queueSave, flushSave: flushSave,
   persistLocal: persistLocal, persistMeta: persistMeta, deleteForever: deleteForever, initStore: initStore, toast: toast,
-  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v32' };
+  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v33' };
 })();
 (function () {
 'use strict';
@@ -896,10 +896,16 @@ function armHold() {
   if (!S.snap) return;
   d.holdT = setTimeout(function () {
     if (!drawing || drawing !== d || d.snapped) return;
+    if (CP.lines && CP.lines.mergeHead && CP.lines.mergeHead(d)) return;
     var A = CP.shapes.analyze(d.s.d), TL = null;
     if ((!A || A.kind !== 'line') && CP.tables && CP.shapes.lineOf) {
       var L2 = CP.shapes.lineOf(d.s.d, 0.18, 12);
       if (L2 && CP.tables.detect(L2, note())) { A = L2; }
+    }
+    if (A && A.pv && CP.lines && (A.kind === 'bent' || A.kind === 'arrow')) {  /* linha com dobras: refaz limpa a partir dos vértices */
+      var bs = { w: d.s.w, ah: A.kind === 'arrow' ? 1 : 0, rd: A.rd, cu: false }, e1 = CP.anchors && CP.anchors.snap({ x: A.pv[0][0], y: A.pv[0][1] }), e2 = CP.anchors && CP.anchors.snap({ x: A.pv[A.pv.length - 1][0], y: A.pv[A.pv.length - 1][1] });
+      if (e1) A.pv[0] = [e1.x, e1.y]; if (e2) A.pv[A.pv.length - 1] = [e2.x, e2.y];
+      A.pts = CP.lines.gen(A.pv, bs); d.bent = { pv: A.pv, ah: bs.ah, rd: A.rd }; A.kind = 'bentdone';
     }
     if (A && CP.anchors && (A.kind === 'line' || (A.kind === 'arrow' && A.straight))) {  /* pontas grudam nos pontos de fixação */
       var h1 = CP.anchors.snap(A.p1), h2 = CP.anchors.snap(A.p2); d.anc = { a1: h1, a2: h2 }; CP.anchors.hint(h2 ? { x: h2.x, y: h2.y } : A.p2);
@@ -933,6 +939,7 @@ function onMove(e) {
   if (drawing.tool === 'lasso') { CP.lasso.move(e); return; }
   if (drawing.tool === 'text') { if (Math.abs(e.clientX - drawing.x0) + Math.abs(e.clientY - drawing.y0) > 8) drawing.moved = true; return; }
   if (drawing.tool === 'eraser') { eraseAt(e); return; }
+  if (drawing.merged) return;
   if (drawing.snapped) {
     /* depois de virar reta, continuar arrastando move a ponta final (encaixa em 0°, 45° e 90°) */
     if (drawing.snapLine && !drawing.tbl) {
@@ -972,7 +979,8 @@ function onUp(e) {
   if (d.snapped && d.anc && d.anc.a1 && d.anc.a2 && d.anc.a1.o !== d.anc.a2.o && (d.snapLine || d.arrowSnap)) {  /* os dois lados caíram em pontos de fixação: vira conector que acompanha */
     var cn = CP.anchors.connect(d.s, d.anc.a1, d.anc.a2, !!d.arrowSnap); d.s = cn; CP.toast('Ligado: a linha acompanha os dois objetos quando você os move.');
   }
-  if (d.pvInit && !d.s.cn && CP.lines && d.s.d.length > 3) CP.lines.attach(d.s, d.pvInit, d.kindArrow ? 1 : 0);
+  if (d.bent && CP.lines && d.s.d.length > 3) CP.lines.attach(d.s, d.bent.pv, d.bent.ah, d.bent.rd);
+  else if (d.pvInit && !d.s.cn && CP.lines && d.s.d.length > 3) CP.lines.attach(d.s, d.pvInit, d.kindArrow ? 1 : 0);
   if (d.rule && d.s.d.length > 3 && CP.ruler.report) CP.ruler.report(d.s);
   if (d.s.d.length) { note().strokes.push(d.s); undoSt.push({ t: 'add', s: d.s }); redoSt = []; E.drawLive(null); E.redraw(); changed(); }
   else E.drawLive(null);
@@ -1238,6 +1246,36 @@ function bbox(P) {
 }
 function boxOf(V) { return bbox(V); }
 
+
+/* ---- Linha com dobras (cotovelo / curva): ajusta poucos vértices, alinha em horizontal/vertical e detecta cantos arredondados ---- */
+function openErr(P, V) {
+  var e = 0; P.forEach(function (p) { var m = 1e9; for (var i = 0; i < V.length - 1; i++) { var a = V[i], b = V[i + 1], vx = b.x - a.x, vy = b.y - a.y, l2 = vx * vx + vy * vy || 1, t = Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / l2)); m = Math.min(m, Math.hypot(p.x - (a.x + vx * t), p.y - (a.y + vy * t))); } e += m; });
+  return e / P.length;
+}
+function bendFit(P) {
+  var L = pathLen(P); if (L < 90) return null;
+  var R = resample(P, 90), V = simplify(R, 0.04 * L), i, rdMin = 0; if (V.length < 3 || V.length > 9) return null;
+  V = V.map(function (p) { return { x: p.x, y: p.y }; });
+  /* canto arredondado = dois vértices próximos: troca pelo ponto de encontro das duas retas vizinhas */
+  for (i = 1; i < V.length - 2; i++) {
+    var sl = dist(V[i], V[i + 1]); if (sl >= 0.22 * L || sl >= 0.6 * Math.min(dist(V[i - 1], V[i]), dist(V[i + 1], V[i + 2]))) continue;
+    var a1 = V[i - 1], a2 = V[i], b1 = V[i + 1], b2 = V[i + 2], d1x = a2.x - a1.x, d1y = a2.y - a1.y, d2x = b2.x - b1.x, d2y = b2.y - b1.y, den = d1x * d2y - d1y * d2x;
+    if (Math.abs(den) < 1e-6) continue; var tt = ((b1.x - a1.x) * d2y - (b1.y - a1.y) * d2x) / den, X = { x: a1.x + d1x * tt, y: a1.y + d1y * tt };
+    if (dist(X, a2) > 1.6 * sl + 10 || dist(X, b1) > 1.6 * sl + 10) continue;
+    V.splice(i, 2, X); rdMin = Math.max(rdMin, sl * 1.3); i--;
+  }
+  if (V.length < 3 || V.length > 6) return null;
+  for (i = 0; i < V.length - 1; i++) if (dist(V[i], V[i + 1]) < 0.09 * L) return null;
+  if (openErr(P, V) > 0.045 * L) return null;
+  for (i = 0; i < V.length - 1; i++) {
+    var a = V[i], b = V[i + 1], ang = Math.abs(Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI);
+    if (ang < 14 || ang > 166) b.y = a.y; else if (Math.abs(ang - 90) < 14) b.x = a.x;
+  }
+  var rd = rdMin;
+  for (i = 1; i < V.length - 1; i++) { var m = 1e9; P.forEach(function (p) { m = Math.min(m, dist(p, V[i])); }); if (m > 0.03 * L) rd = Math.max(rd, Math.min(110, Math.max(26, m * 2.4))); }
+  return { pv: V.map(function (p) { return [round1(p.x), round1(p.y)]; }), rd: round1(rd) };
+}
+
 /* ---- Seta: haste (reta ou curva) que termina numa ponta em V desenhada sem levantar a caneta ---- */
 function arrowOf(P) {
   var n = P.length, a = P[0], ti = 0, md = 0, i;
@@ -1265,19 +1303,19 @@ function arrowOf(P) {
   if (s1.s * s2.s >= 0 || s1.ang < 10 || s1.ang > 75 || s2.ang < 10 || s2.ang > 75) return null;
   /* haste: reta se for quase reta; senão mantém a curva */
   var chord = dist(a, tip), dev = 0; shaft.forEach(function (p) { dev = Math.max(dev, perp(p, a, tip)); });
-  var A = { x: a.x, y: a.y }, T = { x: tip.x, y: tip.y }, straight = dev < 0.1 * chord, list;
+  var A = { x: a.x, y: a.y }, T = { x: tip.x, y: tip.y }, straight = dev < 0.1 * chord, list, bent = null;
   if (straight) {
     var ang = Math.atan2(Math.abs(T.y - A.y), Math.abs(T.x - A.x)) * 180 / Math.PI;
     if (ang < 6) T.y = A.y = (A.y + T.y) / 2; else if (ang > 84) T.x = A.x = (A.x + T.x) / 2;
     list = []; var st = Math.max(2, Math.ceil(dist(A, T) / 8)); for (i = 0; i < st; i++) list.push({ x: A.x + (T.x - A.x) * i / st, y: A.y + (T.y - A.y) * i / st });
-  } else { list = resample(shaft, Math.max(12, Math.round(Ls / 8))).slice(0, -1); }
+  } else { list = resample(shaft, Math.max(12, Math.round(Ls / 8))).slice(0, -1); bent = bendFit(shaft); if (bent) bent.pv[bent.pv.length - 1] = [round1(T.x), round1(T.y)]; }
   var ux = T.x - (straight ? A.x : back.x), uy = T.y - (straight ? A.y : back.y), ul = Math.hypot(ux, uy) || 1; ux /= ul; uy /= ul;
   var h = Math.max(16, Math.min(70, (l1 + l2) / 2, 0.3 * Ls)), r = 28 * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
   var W1 = { x: T.x - h * (ux * c - uy * s), y: T.y - h * (uy * c + ux * s) }, W2 = { x: T.x - h * (ux * c + uy * s), y: T.y - h * (uy * c - ux * s) };
   var hv = [T, W1, T, W2];
   for (i = 0; i < 3; i++) { var q0 = hv[i], q1 = hv[i + 1], sn = Math.max(2, Math.ceil(dist(q0, q1) / 6)); for (var z = 0; z < sn; z++) list.push({ x: q0.x + (q1.x - q0.x) * z / sn, y: q0.y + (q1.y - q0.y) * z / sn }); }
   list.push(W2);
-  return { kind: 'arrow', pts: out(list), box: boxOf(list), p1: A, p2: T, straight: straight };
+  return { kind: 'arrow', pts: out(list), box: boxOf(list), p1: A, p2: T, straight: straight, pv: bent && bent.pv, rd: bent && bent.rd };
 }
 /* ---- Triângulos: equilátero, retângulo e isósceles viram exatos ---- */
 function regTri(V) {
@@ -1342,6 +1380,18 @@ function rectOf(d) {
 }
 
 /* Analisa um traço: devolve { kind, pts, box, ... } ou null */
+
+/* ponta de seta solta: um "V" curto (dois traços de tamanho parecido) */
+function chev(d) {
+  var P = pts(d); if (P.length < 4) return null; var bb = bbox(P), D = Math.hypot(bb.x1 - bb.x0, bb.y1 - bb.y0); if (D < 16 || D > 130) return null;
+  var R = resample(P, 40), V = simplify(R, 0.1 * pathLen(P)); if (V.length !== 3) return null;
+  var l1 = dist(V[0], V[1]), l2 = dist(V[1], V[2]); if (Math.min(l1, l2) < 8 || Math.max(l1, l2) / Math.min(l1, l2) > 2.6) return null;
+  var ux = V[0].x - V[1].x, uy = V[0].y - V[1].y, vx = V[2].x - V[1].x, vy = V[2].y - V[1].y, ang = Math.acos(Math.max(-1, Math.min(1, (ux * vx + uy * vy) / (l1 * l2)))) * 180 / Math.PI;
+  if (ang < 22 || ang > 125) return null;
+  var mx = (V[0].x + V[2].x) / 2, my = (V[0].y + V[2].y) / 2, dx = V[1].x - mx, dy = V[1].y - my, dl = Math.hypot(dx, dy) || 1;
+  return { apex: { x: V[1].x, y: V[1].y }, dir: { x: dx / dl, y: dy / dl }, l1: l1, l2: l2 };
+}
+function bentOf(P) { var bf = bendFit(P); if (!bf) return null; var V = bf.pv.map(function (q) { return { x: q[0], y: q[1] }; }); return { kind: 'bent', pts: polyline(V, false), box: boxOf(V), pv: bf.pv, rd: bf.rd }; }
 function analyze(d) {
   var P = pts(d); if (P.length < 6) return null;
   var bb = bbox(P), w = bb.x1 - bb.x0, h = bb.y1 - bb.y0, D = Math.hypot(w, h);
@@ -1362,8 +1412,8 @@ function analyze(d) {
       return { kind: 'line', pts: polyline([A, B], false), p1: A, p2: B, box: boxOf([A, B]), horiz: Math.abs(A.y - B.y) < .01, vert: Math.abs(A.x - B.x) < .01 };
     }
   }
-  if (gap > 0.8 * L) { if (qg > 40 && qg > 0.5 * qL) { var ux2 = (qb.x - qa.x) / qg, uy2 = (qb.y - qa.y) / qg, A2 = qa, B2 = qb; return { kind: 'line', pts: polyline([A2, B2], false), p1: A2, p2: B2, box: boxOf([A2, B2]), horiz: false, vert: false }; } return null; }
-  if (gap > 0.32 * L) return arrowOf(resample(P, 160));
+  if (gap > 0.8 * L) { var bo = bentOf(P); if (bo) return bo; if (qg > 40 && qg > 0.5 * qL) { var ux2 = (qb.x - qa.x) / qg, uy2 = (qb.y - qa.y) / qg, A2 = qa, B2 = qb; return { kind: 'line', pts: polyline([A2, B2], false), p1: A2, p2: B2, box: boxOf([A2, B2]), horiz: false, vert: false }; } return null; }
+  if (gap > 0.32 * L) { var ar = arrowOf(resample(P, 160)); if (ar) return ar; return bentOf(P); }
 
   /* Formas fechadas: compara círculo, elipse e retângulo pelo erro médio de cada ajuste */
   var R = resample(P, 96), cand = [];
@@ -1405,7 +1455,7 @@ function analyze(d) {
 }
 function recognize(d) { var r = analyze(d); return r ? r.pts : null; }
 
-CP.shapes = { seg: function (a, b) { return polyline([a, b], false); }, recognize: recognize, analyze: analyze, lineOf: lineOf, rectOf: rectOf };
+CP.shapes = { chev: chev, bendFit: function (d) { return bendFit(pts(d)); }, seg: function (a, b) { return polyline([a, b], false); }, recognize: recognize, analyze: analyze, lineOf: lineOf, rectOf: rectOf };
 })();
 (function () {
 'use strict';
@@ -5792,26 +5842,35 @@ function catmull(P) {
   }
   return o;
 }
-/* refaz s.d a partir dos pontos de controle pv */
-function rebuild(s, pv) {
-  var pts = (s.cu && pv.length > 2) ? catmull(pv) : dens(pv, 5), size = Math.max(16, 11 + (s.w || 2.5) * 3.4), out = [];
+function rounded(pv, rd) {
+  var o = [pv[0]], i;
+  for (i = 1; i < pv.length - 1; i++) {
+    var a = pv[i - 1], v = pv[i], c = pv[i + 1], l1 = Math.hypot(a[0] - v[0], a[1] - v[1]) || 1, l2 = Math.hypot(c[0] - v[0], c[1] - v[1]) || 1, r = Math.min(rd, l1 / 2, l2 / 2);
+    var p1 = [v[0] + (a[0] - v[0]) / l1 * r, v[1] + (a[1] - v[1]) / l1 * r], p2 = [v[0] + (c[0] - v[0]) / l2 * r, v[1] + (c[1] - v[1]) / l2 * r];
+    o.push(p1); for (var t = 1; t < 10; t++) { var u = t / 10, w = 1 - u; o.push([w * w * p1[0] + 2 * w * u * v[0] + u * u * p2[0], w * w * p1[1] + 2 * w * u * v[1] + u * u * p2[1]]); } o.push(p2);
+  }
+  o.push(pv[pv.length - 1]); return o;
+}
+/* gera o vetor d a partir dos pontos de controle pv e das propriedades de s (cu, ah, rd, w) */
+function gen(pv, s) {
+  var base = (s.cu && pv.length > 2) ? catmull(pv) : (s.rd > 0 && pv.length > 2 ? rounded(pv, s.rd) : pv), pts = dens(base, 5), size = Math.max(16, 11 + (s.w || 2.5) * 3.4), d = [];
   function head(tip, from) { var dx = tip[0] - from[0], dy = tip[1] - from[1], l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l; function rot(a) { return [tip[0] - size * (dx * Math.cos(a) - dy * Math.sin(a)), tip[1] - size * (dy * Math.cos(a) + dx * Math.sin(a))]; } return [rot(0.5), tip, rot(-0.5)]; }
   var pre = [], post = [], n = pts.length;
-  if (s.ah >= 1 && n > 1) { var h = head(pts[n - 1], pts[Math.max(0, n - 1 - Math.ceil(size / 5))]); post = [h[0], h[1], h[2]]; }
+  if (s.ah >= 1 && n > 1) post = head(pts[n - 1], pts[Math.max(0, n - 1 - Math.ceil(size / 5))]);
   if (s.ah === 2 && n > 1) { var h2 = head(pts[0], pts[Math.min(n - 1, Math.ceil(size / 5))]); pre = [h2[0], h2[1], h2[2], h2[1]]; }
-  var all = pre.concat(pts).concat(post);
-  s.d = []; all.forEach(function (q) { s.d.push(Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10, 60); });
-  setPf(s, pv);
+  pre.concat(pts).concat(post).forEach(function (q) { d.push(Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10, 60); });
+  return d;
 }
+function rebuild(s, pv) { s.d = gen(pv, s); setPf(s, pv); }
 /* marca um traço já reto/seta como "linha editável" sem mexer no desenho */
-function attach(s, pv, ah) { s.ah = ah || 0; s.cu = false; setPf(s, pv); }
+function attach(s, pv, ah, rd) { s.ah = ah || 0; s.cu = false; if (rd > 0) s.rd = rd; else delete s.rd; setPf(s, pv); }
 function copy(s) {
-  var o = { d: s.d.slice(), c: s.c, l: s.l, w: s.w, ds: s.ds, cu: s.cu, ah: s.ah, pf: s.pf ? s.pf.map(function (f) { return f.slice(); }) : undefined };
+  var o = { d: s.d.slice(), c: s.c, l: s.l, w: s.w, ds: s.ds, cu: s.cu, ah: s.ah, rd: s.rd, pf: s.pf ? s.pf.map(function (f) { return f.slice(); }) : undefined };
   if (s.cn) o.car = s.cn.ar; return o;
 }
 function applyState(s, f) {
   if (!('ds' in f)) return;
-  s.w = f.w; ['ds', 'cu', 'ah'].forEach(function (k) { if (f[k] === undefined) delete s[k]; else s[k] = f[k]; });
+  s.w = f.w; ['ds', 'cu', 'ah', 'rd'].forEach(function (k) { if (f[k] === undefined) delete s[k]; else s[k] = f[k]; });
   if (f.pf) s.pf = f.pf.map(function (q) { return q.slice(); }); else delete s.pf;
   if (s.cn && 'car' in f) s.cn.ar = f.car;
 }
@@ -5851,6 +5910,43 @@ function show(sel) {
   sh.appendChild(layer);
 }
 
+
+/* ---------- ponta de seta desenhada separada: gruda na linha que termina perto dela ---------- */
+function mergeHead(d) {
+  var n = note(); if (!n || !CP.shapes || !CP.shapes.chev) return false;
+  var ch = CP.shapes.chev(d.s.d); if (!ch) return false;
+  var best = null, bd = 1e9, lw = Math.max(ch.l1, ch.l2), reach = Math.max(42, 1.6 * lw);
+  n.strokes.forEach(function (t) {
+    if (t === d.s || t.cn || t.k === 'h' || t.d.length < 12 || (CP.layers && !CP.layers.editable(t))) return;
+    var m = t.d.length / 3, ends = [[0, 1], [m - 1, -1]];
+    var xs = [], ys = []; for (var i = 0; i < t.d.length; i += 3) { xs.push(t.d[i]); ys.push(t.d[i + 1]); }
+    var w = Math.max.apply(null, xs) - Math.min.apply(null, xs), h = Math.max.apply(null, ys) - Math.min.apply(null, ys); if (Math.hypot(w, h) < 45) return;
+    if (Math.hypot(t.d[0] - t.d[t.d.length - 3], t.d[1] - t.d[t.d.length - 2]) < 0.2 * Math.hypot(w, h) && !t.pf) return;  /* fechado: é forma, não linha */
+    ends.forEach(function (e) {
+      var k = e[0], ex = t.d[k * 3], ey = t.d[k * 3 + 1], dd = Math.hypot(ex - ch.apex.x, ey - ch.apex.y); if (dd > reach) return;
+      var j = k, acc = 0; while (j + e[1] >= 0 && j + e[1] < m && acc < 25) { acc += Math.hypot(t.d[(j + e[1]) * 3] - t.d[j * 3], t.d[(j + e[1]) * 3 + 1] - t.d[j * 3 + 1]); j += e[1]; }
+      var tx = ex - t.d[j * 3], ty = ey - t.d[j * 3 + 1], tl = Math.hypot(tx, ty) || 1; if ((tx * ch.dir.x + ty * ch.dir.y) / tl < 0.35) return;
+      if (dd < bd) { bd = dd; best = { t: t, first: k === 0 }; }
+    });
+  });
+  if (!best) return false;
+  var t = best.t, from = copy(t), pv = pvOf(t), cu = !!t.cu, rd = t.rd || 0;
+  if (!pv) {
+    var P = []; for (var i = 0; i < t.d.length; i += 3) P.push({ x: t.d[i], y: t.d[i + 1] });
+    var a = P[0], z = P[P.length - 1], g = Math.hypot(z.x - a.x, z.y - a.y), dv = 0; P.forEach(function (p) { dv = Math.max(dv, Math.abs((p.x - a.x) * (z.y - a.y) - (p.y - a.y) * (z.x - a.x)) / (g || 1)); });
+    var bf = CP.shapes.bendFit(t.d);
+    if (g > 20 && dv < 0.12 * g) pv = [[a.x, a.y], [z.x, z.y]];
+    else if (bf) { pv = bf.pv; rd = bf.rd; }
+    else { pv = []; var K = 8; for (i = 0; i < K; i++) { var q = P[Math.round(i * (P.length - 1) / (K - 1))]; pv.push([q.x, q.y]); } cu = true; }
+    t.ah = 0;
+  }
+  if (best.first) pv = pv.slice().reverse();
+  pv[pv.length - 1] = [ch.apex.x, ch.apex.y];
+  var had = (t.ah || 0) >= 1; t.ah = (had && best.first) ? 2 : 1; t.cu = cu; if (rd > 0) t.rd = rd; else delete t.rd; if (!t.w) t.w = d.s.w;
+  rebuild(t, pv); E.push({ t: 'mod', items: [{ s: t, from: from, to: copy(t) }], txs: [] }); E.redraw(); CP.queueSave(n);
+  d.merged = true; d.s.d = []; E.drawLive(null); CP.toast('Ponta de seta ligada à linha.'); return true;
+}
+
 /* ---------- menu de estilo ---------- */
 var STY = [['', 'Contínua'], ['dash', 'Tracejada'], ['dot', 'Pontilhada'], ['dd', 'Traço e ponto']], WID = [1.5, 2.5, 4, 6, 9, 14];
 function sample(ds, w) { var da = ds === 'dash' ? '12 8' : ds === 'dot' ? '1 9' : ds === 'dd' ? '14 7 2 7' : ''; return '<svg width="64" height="18" viewBox="0 0 64 18"><line x1="4" y1="9" x2="60" y2="9" stroke="currentColor" stroke-width="' + Math.min(w, 8) + '" stroke-linecap="round"' + (da ? ' stroke-dasharray="' + da + '"' : '') + '/></svg>'; }
@@ -5863,13 +5959,14 @@ function menu(list, after) {
     var s0 = list[0], h = '<h3>Estilo da linha</h3><div style="font-weight:700;margin:2px 0">Traço</div><div style="display:flex;flex-wrap:wrap;gap:6px">' + STY.map(function (t) { return '<button type="button" class="chip' + ((s0.ds || '') === t[0] ? ' on' : '') + '" data-ds="' + t[0] + '" style="display:flex;flex-direction:column;align-items:center;gap:0;min-width:84px">' + sample(t[0], 3) + '<small>' + t[1] + '</small></button>'; }).join('') + '</div>' +
       '<div style="font-weight:700;margin:8px 0 2px">Espessura</div><div style="display:flex;flex-wrap:wrap;gap:6px">' + WID.map(function (w) { return '<button type="button" class="chip' + (Math.abs((s0.w || 0) - w) < 0.3 ? ' on' : '') + '" data-w="' + w + '" style="min-width:76px">' + sample(s0.ds || '', w) + '</button>'; }).join('') + '</div>';
     if (canHead) { var ah = one.cn ? (one.cn.ar ? 1 : 0) : (one.ah || 0); h += '<div style="font-weight:700;margin:8px 0 2px">Pontas</div><div style="display:flex;flex-wrap:wrap;gap:6px">' + [[0, 'Sem ponta'], [1, 'Seta no fim']].concat(one.cn ? [] : [[2, 'Seta nas duas']]).map(function (t) { return '<button type="button" class="chip' + (ah === t[0] ? ' on' : '') + '" data-ah="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>'; }
-    if (canShape) { var sh0 = one.pf ? (one.cu ? 'c' : (one.pf.length > 2 ? 'q' : 'r')) : ''; h += '<div style="font-weight:700;margin:8px 0 2px">Forma' + (one.pf ? '' : ' <small style="font-weight:400;color:var(--muted)">(vira uma linha editável)</small>') + '</div><div style="display:flex;flex-wrap:wrap;gap:6px">' + [['r', 'Reta'], ['q', 'Quebrada'], ['c', 'Curva']].map(function (t) { return '<button type="button" class="chip' + (sh0 === t[0] ? ' on' : '') + '" data-sh="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div><p style="margin:4px 0 0;font-size:12.5px;color:var(--muted)">Com a linha selecionada, arraste as bolinhas para mover os pontos e a bolinha com + para dobrar ou curvar. Toque num ponto do meio para apagá-lo.</p>'; }
+    if (canShape) { var sh0 = one.pf ? (one.cu ? 'c' : (one.pf.length > 2 ? 'q' : 'r')) : ''; h += '<div style="font-weight:700;margin:8px 0 2px">Forma' + (one.pf ? '' : ' <small style="font-weight:400;color:var(--muted)">(vira uma linha editável)</small>') + '</div><div style="display:flex;flex-wrap:wrap;gap:6px">' + [['r', 'Reta'], ['q', 'Quebrada'], ['c', 'Curva']].map(function (t) { return '<button type="button" class="chip' + (sh0 === t[0] ? ' on' : '') + '" data-sh="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>' + (one.pf && one.pf.length > 2 && !one.cu ? '<div style="font-weight:700;margin:8px 0 2px">Cantos</div><div style="display:flex;gap:6px"><button type="button" class="chip' + (!(one.rd > 0) ? ' on' : '') + '" data-rd="0">Vivos</button><button type="button" class="chip' + (one.rd > 0 ? ' on' : '') + '" data-rd="50">Arredondados</button></div>' : '') + '<p style="margin:4px 0 0;font-size:12.5px;color:var(--muted)">Com a linha selecionada, arraste as bolinhas para mover os pontos e a bolinha com + para dobrar ou curvar. Toque num ponto do meio para apagá-lo.</p>'; }
     return h + '<div class="btns"><button type="button" class="ok" id="lsOk">Pronto</button></div>';
   }
   function wire() {
     CP.$$('[data-ds]', host).forEach(function (b) { b.addEventListener('click', function () { var v = b.getAttribute('data-ds'); apply(function (s) { if (v) s.ds = v; else delete s.ds; }); }); });
     CP.$$('[data-w]', host).forEach(function (b) { b.addEventListener('click', function () { var v = +b.getAttribute('data-w'); apply(function (s) { s.w = v; if (s.pf && !s.cn) { var pv = pvOf(s); if (pv) rebuild(s, pv); } }); }); });
     CP.$$('[data-ah]', host).forEach(function (b) { b.addEventListener('click', function () { var v = +b.getAttribute('data-ah'); apply(function (s) { if (s.cn) { s.cn.ar = v >= 1; return; } s.ah = v; var pv = pvOf(s); if (pv) rebuild(s, pv); }); }); });
+    CP.$$('[data-rd]', host).forEach(function (b) { b.addEventListener('click', function () { var v = +b.getAttribute('data-rd'); apply(function (s) { if (v) s.rd = v; else delete s.rd; var pv = pvOf(s); if (pv) rebuild(s, pv); }); if (CP.lasso) CP.lasso.refresh(); }); });
     CP.$$('[data-sh]', host).forEach(function (b) { b.addEventListener('click', function () { var v = b.getAttribute('data-sh'); apply(function (s) {
       var pv = pvOf(s); if (!pv) { var d = s.d; pv = [[d[0], d[1]], [d[d.length - 3], d[d.length - 2]]]; s.ah = 0; }
       if (v === 'r') { pv = [pv[0], pv[pv.length - 1]]; s.cu = false; }
@@ -5881,7 +5978,7 @@ function menu(list, after) {
   CP.ui.sheetMenu(html(), function (h) { host = h; wire(); });
 }
 
-CP.lines = { copy: copy, apply: applyState, attach: attach, rebuild: rebuild, pvOf: pvOf, show: show, hide: hide, menu: menu, editable: editable };
+CP.lines = { gen: gen, mergeHead: mergeHead, copy: copy, apply: applyState, attach: attach, rebuild: rebuild, pvOf: pvOf, show: show, hide: hide, menu: menu, editable: editable };
 })();
 (function () {
 'use strict';
