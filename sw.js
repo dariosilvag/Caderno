@@ -1,4 +1,4 @@
-var V = 'caderno-v24';
+var V = 'caderno-v25';
 var FILES = ['./', 'index.html', 'vendor3d.js', 'manifest.webmanifest', 'logo-180.png', 'logo-192.png', 'logo-512.png'];
 
 self.addEventListener('install', function (e) {
