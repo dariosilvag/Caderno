@@ -602,7 +602,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&
 window.CP = { $: $, $$: $$, S: S, icon: icon, svgIcon: svgIcon, paintIcons: paintIcons, COLORS: COLORS, HL_COLORS: HL_COLORS, PAPERS: PAPERS,
   PAGE_W: PAGE_W, PAGE_H: PAGE_H, uid: uid, newNote: newNote, byId: byId, cur: cur, queueSave: queueSave, flushSave: flushSave,
   persistLocal: persistLocal, persistMeta: persistMeta, deleteForever: deleteForever, initStore: initStore, toast: toast,
-  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v20' };
+  fmtDate: fmtDate, esc: esc, setSavedLabel: setSavedLabel, defaultFolders: defaultFolders, hooks: {}, files: files, saveBlob: saveBlob, noteFileIds: noteFileIds, fileInUse: fileInUse, inits: [], VERSION: 'v22' };
 })();
 (function () {
 'use strict';
@@ -5199,34 +5199,70 @@ function bbox(strokes) {
   strokes.forEach(function (s) { for (var i = 0; i < s.d.length; i += 3) { b.x0 = Math.min(b.x0, s.d[i]); b.x1 = Math.max(b.x1, s.d[i]); b.y0 = Math.min(b.y0, s.d[i + 1]); b.y1 = Math.max(b.y1, s.d[i + 1]); } });
   return b;
 }
-function raster(strokes, b) {
-  var pad = 30, w = b.x1 - b.x0 + 2 * pad, h = b.y1 - b.y0 + 2 * pad, k = Math.min(2.4, 2600 / Math.max(w, 1));
-  var cv = document.createElement('canvas'); cv.width = Math.max(40, Math.round(w * k)); cv.height = Math.max(40, Math.round(h * k));
+function raster(strokes, b, target) {
+  /* traço fino e uniforme, preto sobre branco; a altura da linha vira ~target px (o leitor acerta mais nesse tamanho) */
+  var pad = 24, h0 = Math.max(b.y1 - b.y0, 1), w0 = Math.max(b.x1 - b.x0, 1), k = target ? Math.min(3, Math.max(0.4, target / h0)) : Math.min(2.4, 2600 / (w0 + 2 * pad));
+  if ((w0 + 2 * pad) * k > 3200) k = 3200 / (w0 + 2 * pad);
+  var cv = document.createElement('canvas'); cv.width = Math.max(40, Math.round((w0 + 2 * pad) * k)); cv.height = Math.max(40, Math.round((h0 + 2 * pad) * k));
   var c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height);
   c.strokeStyle = '#000'; c.fillStyle = '#000'; c.lineCap = 'round'; c.lineJoin = 'round';
+  var lw = Math.max(3, Math.min(9, h0 * k * 0.07));
   strokes.forEach(function (s) {
-    if (s.k === 'h' || s.cn) return; var d = s.d; c.lineWidth = Math.max(2.5 * k, (s.w || 3) * k * 0.9); c.beginPath();
+    if (s.k === 'h' || s.cn) return; var d = s.d; c.lineWidth = lw; c.beginPath();
     for (var i = 0; i < d.length; i += 3) { var x = (d[i] - b.x0 + pad) * k, y = (d[i + 1] - b.y0 + pad) * k; if (i === 0) c.moveTo(x, y); else c.lineTo(x, y); }
     if (d.length === 3) c.lineTo((d[0] - b.x0 + pad) * k + .1, (d[1] - b.y0 + pad) * k); c.stroke();
   });
   return cv;
+}
+/* separa a escrita em linhas (de cima para baixo) */
+function lines(strokes) {
+  var info = strokes.map(function (s) { var b = bbox([s]); return { s: s, b: b, cy: (b.y0 + b.y1) / 2, h: b.y1 - b.y0 }; }).sort(function (a, c) { return a.cy - c.cy; });
+  var hs = info.map(function (o) { return o.h; }).sort(function (a, c) { return a - c; }), med = hs[Math.floor(hs.length / 2)] || 20;
+  var out = [], cur = null;
+  info.forEach(function (o) {
+    if (cur && o.cy <= cur.y1 - (cur.y1 - cur.y0) * 0.15 + med * 0.25 && o.cy >= cur.y0 - med * 0.4) { cur.list.push(o.s); cur.y0 = Math.min(cur.y0, o.b.y0); cur.y1 = Math.max(cur.y1, o.b.y1); }
+    else { cur = { list: [o.s], y0: o.b.y0, y1: o.b.y1 }; out.push(cur); }
+  });
+  return out.map(function (l) { return l.list; });
+}
+
+/* ---- leitura com a IA (Gemini): muito melhor com letra cursiva ---- */
+function hasKey() { try { return !!localStorage.getItem('cp_aikey'); } catch (e) { return false; } }
+function viaAI(strokes) {
+  var b = bbox(strokes), cv = raster(strokes, b), data = cv.toDataURL('image/png').split(',')[1];
+  return CP.aiApi.vision('Esta imagem contém escrita à mão (provavelmente em português do Brasil; pode ter termos técnicos de engenharia, números, unidades e fórmulas). Transcreva exatamente o que está escrito, mantendo as quebras de linha. Não corrija, não explique e não acrescente nada: responda somente com a transcrição.', data, 'image/png').then(function (t) { return { text: String(t).replace(/^\s+|\s+$/g, ''), engine: 'ia' }; });
+}
+/* ---- leitura offline (Tesseract), linha por linha ---- */
+function viaOffline(strokes) {
+  var ls = lines(strokes), res = [], conf = [];
+  return ensure().then(function (w) {
+    return ls.reduce(function (p, l) {
+      return p.then(function () {
+        var b = bbox(l), cv = raster(l, b, 90);
+        return w.setParameters({ tessedit_pageseg_mode: ls.length === 1 && (b.x1 - b.x0) < 4 * (b.y1 - b.y0) ? '8' : '7', preserve_interword_spaces: '1' }).then(function () { return w.recognize(cv); }).then(function (r) { res.push(((r.data.text || '').replace(/\s+/g, ' ')).trim()); conf.push(r.data.confidence || 0); });
+      });
+    }, Promise.resolve());
+  }).then(function () { return { text: res.filter(Boolean).join('\n'), engine: 'offline', conf: conf.length ? conf.reduce(function (a, c) { return a + c; }, 0) / conf.length : null }; });
+}
+function read(strokes) {
+  strokes = (strokes || []).filter(function (s) { return s.k !== 'h' && !s.cn; }); if (!strokes.length) return Promise.resolve({ text: '', engine: 'none' });
+  if (hasKey() && CP.aiApi && navigator.onLine !== false) return viaAI(strokes).catch(function (e) { return viaOffline(strokes).then(function (r) { r.fallback = true; return r; }); });
+  return viaOffline(strokes);
 }
 
 function run(strokes) {
   var n = CP.cur(); if (!n) return;
   strokes = (strokes || []).filter(function (s) { return s.k !== 'h' && !s.cn; });
   if (!strokes.length) { CP.toast('Selecione com o laço a escrita que quer converter.'); return; }
-  var b = bbox(strokes), cv = raster(strokes, b);
-  CP.toast('Lendo a escrita… (na primeira vez demora um pouco)');
-  ensure().then(function (w) { return w.recognize(cv); }).then(function (r) {
-    var txt = ((r && r.data && r.data.text) || '').replace(/\s+$/g, '').replace(/^\s+/, '');
-    confirm(strokes, b, txt, r && r.data && r.data.confidence);
-  }).catch(function (e) {
+  var b = bbox(strokes);
+  CP.toast(hasKey() ? 'Lendo a escrita com a IA…' : 'Lendo a escrita… (na primeira vez demora um pouco)');
+  read(strokes).then(function (r) { confirm(strokes, b, r.text, r); }).catch(function (e) {
     CP.toast(e && e.missing ? 'Faltam arquivos do reconhecimento no GitHub: envie tesseract.min.js, tesseract-worker.js, tesseract-core.js e por.traineddata.gz na pasta do Caderno.'
       : (navigator.onLine === false ? 'Sem internet: abra este recurso uma vez online para guardar os arquivos no aparelho.' : 'Não consegui reconhecer (' + String((e && (e.message || e.name)) || e) + ').'));
   });
 }
-function confirm(strokes, b, txt, conf) {
+function confirm(strokes, b, txt, r) {
+  var conf = r && r.conf, eng = r && r.engine;
   CP.ui.sheetMenu('<h3>Texto reconhecido</h3><p style="margin:0;color:var(--muted);font-size:13px">' + (conf != null ? 'Confiança do leitor: ' + Math.round(conf) + '%. ' : '') + 'Corrija o que estiver errado antes de trocar. Letra de forma é lida com muito mais acerto que letra cursiva.</p>' +
     '<textarea id="ocT" rows="6" style="width:100%;box-sizing:border-box;font-size:17px;border-radius:10px;padding:8px">' + esc(txt) + '</textarea>' +
     '<label style="display:flex;gap:8px;align-items:center;font-size:14px"><input id="ocK" type="checkbox" style="min-height:0;width:20px;height:20px">Manter a escrita original também</label>' +
@@ -5253,8 +5289,7 @@ function apply(strokes, b, v, keep) {
   if (E.placeTexts) E.placeTexts(); E.redraw(); CP.queueSave(n);
   CP.toast('Trocado por texto digitado. Toque nele para editar.');
 }
-function read(strokes) { var b = bbox(strokes), cv = raster(strokes, b); return ensure().then(function (w) { return w.recognize(cv); }).then(function (r) { return (r && r.data && r.data.text) || ''; }); }
-CP.ocr = { read: read, run: run, ensure: ensure, raster: raster, bbox: bbox };
+CP.ocr = { lines: lines, viaOffline: viaOffline, read: function (st) { return read(st).then(function (r) { return r.text; }); }, readFull: read, run: run, ensure: ensure, raster: raster, bbox: bbox };
 })();
 (function () {
 'use strict';
@@ -5306,6 +5341,7 @@ function gemini(contents, sys) {
   });
 }
 
+function vision(prompt, b64, mime) { return gemini([{ role: 'user', parts: [{ inlineData: { mimeType: mime, data: b64 } }, { text: prompt }] }]); }
 /* ---------- tradução ---------- */
 function chunks(t) {
   var parts = t.split(/(?<=[.!?\n])\s+/), out = [], cur = '';
@@ -5413,7 +5449,7 @@ CP.trSelection = function () { CP.translateMenu(grabSel()); };
 CP.aiSelection = function () { CP.aiMenu(grabSel()); };
 CP.lassoTranslate = function (strokes) { fromLasso(strokes).then(function (t) { if (!t) CP.toast('Não achei texto nessa seleção.'); else CP.translateMenu(t); }); };
 CP.lassoAI = function (strokes) { fromLasso(strokes).then(function (t) { CP.aiMenu(t || ''); }); };
-CP.aiApi = { chunks: chunks, translate: translate };
+CP.aiApi = { chunks: chunks, translate: translate, vision: vision, gemini: gemini };
 })();
 (function () {
 'use strict';
